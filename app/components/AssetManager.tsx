@@ -41,6 +41,23 @@ interface SearchResult {
 }
 
 const STORAGE_KEY = 'portfolio_assets';
+const ALLOCATION_STORAGE_KEY = 'portfolio_allocations';
+
+function loadAllocations(): Record<AssetCategory, number> {
+  try {
+    const raw = localStorage.getItem(ALLOCATION_STORAGE_KEY);
+    if (!raw) return Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>;
+    const parsed = JSON.parse(raw);
+    // 누락된 카테고리는 0으로 채움
+    return Object.fromEntries(CATEGORIES.map((c) => [c, parsed[c] ?? 0])) as Record<AssetCategory, number>;
+  } catch {
+    return Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>;
+  }
+}
+
+function saveAllocations(allocs: Record<AssetCategory, number>) {
+  localStorage.setItem(ALLOCATION_STORAGE_KEY, JSON.stringify(allocs));
+}
 
 function loadAssets(): Asset[] {
   try {
@@ -514,6 +531,131 @@ function EditModal({
   );
 }
 
+function AllocationTable({
+  assets,
+  quotes,
+  exchangeRate,
+  targetAllocations,
+  onChangeTargetAllocations,
+}: {
+  assets: Asset[];
+  quotes: Record<string, Quote>;
+  exchangeRate: number;
+  targetAllocations: Record<AssetCategory, number>;
+  onChangeTargetAllocations: (allocs: Record<AssetCategory, number>) => void;
+}) {
+  const categoryTotals = CATEGORIES.reduce<Record<AssetCategory, number>>((acc, cat) => {
+    acc[cat] = assets
+      .filter((a) => a.category === cat)
+      .reduce((sum, a) => {
+        const q = quotes[a.ticker];
+        const priceKRW =
+          q?.price != null
+            ? quotePriceToKRW(q.price, a, exchangeRate)
+            : toKRW(a.purchasePrice, a.purchaseCurrency, exchangeRate);
+        return sum + priceKRW * a.quantity;
+      }, 0);
+    return acc;
+  }, {} as Record<AssetCategory, number>);
+
+  const total = Object.values(categoryTotals).reduce((s, v) => s + v, 0);
+  const targetSum = CATEGORIES.reduce((s, c) => s + (Number(targetAllocations[c]) || 0), 0);
+
+  function handleChange(cat: AssetCategory, val: string) {
+    const num = Math.max(0, Math.min(100, Number(val) || 0));
+    const updated = { ...targetAllocations, [cat]: num };
+    onChangeTargetAllocations(updated);
+    saveAllocations(updated);
+  }
+
+  return (
+    <div className="space-y-2">
+      <h2 className="text-lg font-semibold">목표 비중</h2>
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left p-3">분류</th>
+              <th className="text-right p-3">목표 비중</th>
+              <th className="text-right p-3">현재 비중</th>
+              <th className="text-right p-3">차이</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {CATEGORIES.map((cat) => {
+              const currentPct = total > 0 ? (categoryTotals[cat] / total) * 100 : 0;
+              const target = Number(targetAllocations[cat]) || 0;
+              const diff = currentPct - target;
+              const absDiff = Math.abs(diff);
+              const isAlert = target > 0 && absDiff >= 5;
+              const diffColor = isAlert
+                ? (diff > 0 ? 'text-red-500' : 'text-blue-500')
+                : 'text-gray-600';
+              const diffAmount = total > 0 ? (diff / 100) * total : 0;
+
+              return (
+                <tr key={cat} className="hover:bg-gray-50">
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                      <span>{cat}</span>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <input
+                        type="number"
+                        value={targetAllocations[cat] === 0 ? '' : targetAllocations[cat]}
+                        onChange={(e) => handleChange(cat, e.target.value)}
+                        min="0"
+                        max="100"
+                        step="1"
+                        placeholder="0"
+                        className="w-16 border rounded px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-gray-500">%</span>
+                    </div>
+                  </td>
+                  <td className="p-3 text-right text-gray-700">
+                    {total > 0 ? `${currentPct.toFixed(1)}%` : '—'}
+                  </td>
+                  <td className={`p-3 text-right font-medium ${diffColor}`}>
+                    {target > 0 && total > 0 ? (
+                      <>
+                        <span>{diff >= 0 ? '+' : ''}{diff.toFixed(1)}%</span>
+                        <span className="block text-xs font-normal">
+                          {diffAmount >= 0 ? '+' : ''}{formatKorean(Math.round(diffAmount))}원
+                        </span>
+                      </>
+                    ) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t">
+            <tr>
+              <td className="p-3 font-medium text-gray-700">합계</td>
+              <td className={`p-3 text-right font-medium ${targetSum > 0 && Math.abs(targetSum - 100) > 0.01 ? 'text-amber-500' : 'text-gray-700'}`}>
+                {targetSum > 0 ? `${targetSum.toFixed(1)}%` : '—'}
+              </td>
+              <td className="p-3 text-right font-medium text-gray-700">
+                {total > 0 ? '100.0%' : '—'}
+              </td>
+              <td className="p-3" />
+            </tr>
+          </tfoot>
+        </table>
+        {targetSum > 0 && Math.abs(targetSum - 100) > 0.01 && (
+          <div className="px-3 py-2 bg-amber-50 border-t text-amber-600 text-xs">
+            목표 비중 합계가 100%가 아닙니다 (현재 {targetSum.toFixed(1)}%)
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type SortKey = 'ticker' | 'category' | 'currentPrice' | 'changePercent' | 'quantity' | 'evalAmount' | 'purchasePrice' | 'pnl';
 type SortDir = 'asc' | 'desc';
 
@@ -538,11 +680,15 @@ export default function AssetManager() {
   const [exchangeRate, setExchangeRate] = useState<number>(0);
   const [sortKey, setSortKey] = useState<SortKey>('category');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [targetAllocations, setTargetAllocations] = useState<Record<AssetCategory, number>>(
+    Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>
+  );
 
   const search = useTickerSearch();
 
   useEffect(() => {
     setAssets(loadAssets());
+    setTargetAllocations(loadAllocations());
     fetchExchangeRate();
   }, []);
 
@@ -763,6 +909,15 @@ export default function AssetManager() {
 
       {/* 도넛 차트 */}
       {assets.length > 0 && <DonutChart assets={assets} quotes={quotes} exchangeRate={rate} />}
+
+      {/* 목표 비중 */}
+      <AllocationTable
+        assets={assets}
+        quotes={quotes}
+        exchangeRate={rate}
+        targetAllocations={targetAllocations}
+        onChangeTargetAllocations={setTargetAllocations}
+      />
 
       {/* 자산 목록 */}
       {assets.length > 0 ? (
