@@ -1,98 +1,125 @@
 import YahooFinance from 'yahoo-finance2';
 import { type NextRequest } from 'next/server';
+import { CRYPTO_ASSETS, KR_STOCKS, resolveAssetName } from '@/app/lib/kr-assets';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
-// 주요 한국 주식 목록 (한국어 검색용)
-const KR_STOCKS = [
-  // KOSPI 대형주
-  { ticker: '005930.KS', name: '삼성전자', typeDisp: 'Equity' },
-  { ticker: '000660.KS', name: 'SK하이닉스', typeDisp: 'Equity' },
-  { ticker: '373220.KS', name: 'LG에너지솔루션', typeDisp: 'Equity' },
-  { ticker: '207940.KS', name: '삼성바이오로직스', typeDisp: 'Equity' },
-  { ticker: '005380.KS', name: '현대차', typeDisp: 'Equity' },
-  { ticker: '000270.KS', name: '기아', typeDisp: 'Equity' },
-  { ticker: '068270.KS', name: '셀트리온', typeDisp: 'Equity' },
-  { ticker: '005490.KS', name: 'POSCO홀딩스', typeDisp: 'Equity' },
-  { ticker: '006400.KS', name: '삼성SDI', typeDisp: 'Equity' },
-  { ticker: '105560.KS', name: 'KB금융', typeDisp: 'Equity' },
-  { ticker: '055550.KS', name: '신한지주', typeDisp: 'Equity' },
-  { ticker: '035720.KS', name: '카카오', typeDisp: 'Equity' },
-  { ticker: '035420.KS', name: 'NAVER', typeDisp: 'Equity' },
-  { ticker: '086790.KS', name: '하나금융지주', typeDisp: 'Equity' },
-  { ticker: '051910.KS', name: 'LG화학', typeDisp: 'Equity' },
-  { ticker: '028260.KS', name: '삼성물산', typeDisp: 'Equity' },
-  { ticker: '066570.KS', name: 'LG전자', typeDisp: 'Equity' },
-  { ticker: '012330.KS', name: '현대모비스', typeDisp: 'Equity' },
-  { ticker: '096770.KS', name: 'SK이노베이션', typeDisp: 'Equity' },
-  { ticker: '017670.KS', name: 'SK텔레콤', typeDisp: 'Equity' },
-  { ticker: '030200.KS', name: 'KT', typeDisp: 'Equity' },
-  { ticker: '034730.KS', name: 'SK', typeDisp: 'Equity' },
-  { ticker: '010130.KS', name: '고려아연', typeDisp: 'Equity' },
-  { ticker: '034020.KS', name: '두산에너빌리티', typeDisp: 'Equity' },
-  { ticker: '259960.KS', name: '크래프톤', typeDisp: 'Equity' },
-  { ticker: '000810.KS', name: '삼성화재', typeDisp: 'Equity' },
-  { ticker: '316140.KS', name: '우리금융지주', typeDisp: 'Equity' },
-  { ticker: '003550.KS', name: 'LG', typeDisp: 'Equity' },
-  { ticker: '011170.KS', name: '롯데케미칼', typeDisp: 'Equity' },
-  { ticker: '009150.KS', name: '삼성전기', typeDisp: 'Equity' },
-  { ticker: '018260.KS', name: '삼성에스디에스', typeDisp: 'Equity' },
-  { ticker: '032830.KS', name: '삼성생명', typeDisp: 'Equity' },
-  { ticker: '015760.KS', name: '한국전력', typeDisp: 'Equity' },
-  { ticker: '047050.KS', name: '포스코인터내셔널', typeDisp: 'Equity' },
-  // KOSDAQ
-  { ticker: '247540.KQ', name: '에코프로비엠', typeDisp: 'Equity' },
-  { ticker: '086520.KQ', name: '에코프로', typeDisp: 'Equity' },
-  { ticker: '028300.KQ', name: 'HLB', typeDisp: 'Equity' },
-  { ticker: '293490.KQ', name: '카카오게임즈', typeDisp: 'Equity' },
-  { ticker: '357780.KQ', name: '솔브레인', typeDisp: 'Equity' },
-  { ticker: '112040.KQ', name: '위메이드', typeDisp: 'Equity' },
-  // ETF
-  { ticker: '069500.KS', name: 'KODEX 200', typeDisp: 'ETF' },
-  { ticker: '229200.KQ', name: 'KODEX 코스닥150', typeDisp: 'ETF' },
-  { ticker: '122630.KS', name: 'KODEX 레버리지', typeDisp: 'ETF' },
-  { ticker: '252670.KS', name: 'KODEX 200선물인버스2X', typeDisp: 'ETF' },
-  { ticker: '360750.KS', name: 'TIGER 미국S&P500', typeDisp: 'ETF' },
-  { ticker: '379800.KS', name: 'KODEX 미국S&P500TR', typeDisp: 'ETF' },
-  { ticker: '133690.KS', name: 'TIGER 미국나스닥100', typeDisp: 'ETF' },
-  { ticker: '114800.KS', name: 'KODEX 인버스', typeDisp: 'ETF' },
-  { ticker: '148020.KS', name: 'KBSTAR 미국S&P500', typeDisp: 'ETF' },
-  { ticker: '453850.KS', name: 'KODEX 미국반도체MV', typeDisp: 'ETF' },
-];
+/** 자동완성 목록에 보여줄 최대 개수 */
+const MAX_RESULTS = 8;
 
-// 주요 암호화폐 목록
-const CRYPTO_ASSETS = [
-  { ticker: 'BTC-USD', name: '비트코인', nameEn: 'Bitcoin', typeDisp: 'Cryptocurrency' },
-  { ticker: 'ETH-USD', name: '이더리움', nameEn: 'Ethereum', typeDisp: 'Cryptocurrency' },
-  { ticker: 'XRP-USD', name: '리플', nameEn: 'XRP', typeDisp: 'Cryptocurrency' },
-  { ticker: 'SOL-USD', name: '솔라나', nameEn: 'Solana', typeDisp: 'Cryptocurrency' },
-  { ticker: 'BNB-USD', name: '바이낸스코인', nameEn: 'BNB', typeDisp: 'Cryptocurrency' },
-  { ticker: 'DOGE-USD', name: '도지코인', nameEn: 'Dogecoin', typeDisp: 'Cryptocurrency' },
-  { ticker: 'ADA-USD', name: '에이다', nameEn: 'Cardano', typeDisp: 'Cryptocurrency' },
-  { ticker: 'AVAX-USD', name: '아발란체', nameEn: 'Avalanche', typeDisp: 'Cryptocurrency' },
-];
+interface SearchItem {
+  ticker: string;
+  name: string;
+  typeDisp: string;
+}
+
+/**
+ * Yahoo의 `quoteType`을 내장 목록과 같은 표기로 맞춘다.
+ *
+ * `lang: ko-KR`로 검색하면 `typeDisp`가 한글("주식", "암호화폐")로 오는데,
+ * 내장 목록은 영문 표기를 쓰므로 한 목록에 섞이면 배지가 들쭉날쭉해진다.
+ */
+const TYPE_LABELS: Record<string, string> = {
+  EQUITY: 'Equity',
+  ETF: 'ETF',
+  CRYPTOCURRENCY: 'Cryptocurrency',
+  MUTUALFUND: 'Fund',
+  INDEX: 'Index',
+  CURRENCY: 'Currency',
+  FUTURE: 'Future',
+};
 
 function hasKorean(str: string) {
   return /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(str);
 }
 
-function searchKrStocks(q: string) {
-  const lower = q.toLowerCase();
-  return KR_STOCKS.filter(
-    (s) =>
-      s.name.includes(q) ||
-      s.ticker.toLowerCase().includes(lower),
-  ).slice(0, 8);
+/**
+ * 코드는 앞에서부터 맞을 때만 찾은 것으로 본다.
+ *
+ * 부분 일치로 두면 `s` 한 글자에 `.KS` 종목이 전부 걸려 목록을 덮어버린다.
+ * `005930`, `00593`(입력 중), `005930.KS` 모두 맞고 `s`는 걸리지 않는다.
+ */
+function matchesTicker(ticker: string, lower: string) {
+  const full = ticker.toLowerCase();
+  return full === lower || full.split('.')[0].startsWith(lower);
 }
 
-function searchCrypto(q: string) {
+/**
+ * 내장 국내 주식 목록 검색.
+ *
+ * `matchName`이 꺼져 있으면 코드로만 찾는다. 영문 질의에서 이름까지 부분일치로
+ * 보면 `s` 한 글자에 "SK하이닉스"·"삼성SDI" 같은 종목이 목록을 채워 Yahoo 결과를
+ * 밀어내기 때문이다. 이제 Yahoo도 국내 종목을 한글 이름으로 주므로 이름 검색은
+ * 한글 질의(= Yahoo가 거부하는 질의)에서만 쓰면 된다.
+ */
+function searchKrStocks(q: string, matchName: boolean): SearchItem[] {
+  const lower = q.toLowerCase();
+  return KR_STOCKS.filter(
+    (s) => (matchName && s.name.includes(q)) || matchesTicker(s.ticker, lower),
+  ).slice(0, MAX_RESULTS);
+}
+
+function searchCrypto(q: string): SearchItem[] {
   const lower = q.toLowerCase();
   return CRYPTO_ASSETS.filter(
     (s) =>
       s.name.includes(q) ||
       s.nameEn.toLowerCase().includes(lower) ||
-      s.ticker.toLowerCase().includes(lower),
-  ).map(({ nameEn: _n, ...rest }) => rest);
+      matchesTicker(s.ticker, lower),
+  ).map((s) => ({ ticker: s.ticker, name: s.name, typeDisp: s.typeDisp }));
+}
+
+/**
+ * Yahoo Finance 종목 검색.
+ *
+ * 국내 종목의 한글 이름은 `lang: ko-KR`로 물어봐야 `longname`에 담겨 온다.
+ * (예: `005930` → "삼성전자(주)", `042660` → "한화오션(주)") 기본 설정으로는
+ * 로마자 이름만 오기 때문에 코드로 검색하면 종목명이 영문으로 나온다.
+ *
+ * 다만 이 응답은 `typeDisp`가 한글이어서 yahoo-finance2의 스키마 검증에 걸린다.
+ * 이름을 얻는 것이 목적이니 `validateResult: false`로 검증을 끄고, 쓰는 필드만
+ * 직접 확인해서 읽는다. (해외 종목 결과는 기본 검색과 같다)
+ */
+async function searchYahoo(query: string): Promise<SearchItem[]> {
+  const result = await yahooFinance.search(
+    query,
+    { lang: 'ko-KR', region: 'KR' },
+    { validateResult: false },
+  );
+
+  const quotes = (result as { quotes?: Record<string, unknown>[] }).quotes ?? [];
+  const asString = (value: unknown) => (typeof value === 'string' && value ? value : undefined);
+
+  return quotes.flatMap((item) => {
+    const symbol = asString(item.symbol);
+    if (!symbol) return [];
+    return [
+      {
+        ticker: symbol,
+        name: resolveAssetName(symbol, {
+          shortName: asString(item.shortname),
+          longName: asString(item.longname),
+        }),
+        typeDisp: TYPE_LABELS[asString(item.quoteType) ?? ''] ?? '',
+      },
+    ];
+  });
+}
+
+/** 앞쪽 목록을 우선해 티커 중복을 없애고 개수를 맞춘다. */
+function merge(...lists: SearchItem[][]): SearchItem[] {
+  const seen = new Set<string>();
+  const merged: SearchItem[] = [];
+
+  for (const item of lists.flat()) {
+    const key = item.ticker.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+    if (merged.length >= MAX_RESULTS) break;
+  }
+
+  return merged;
 }
 
 export async function GET(request: NextRequest) {
@@ -103,40 +130,20 @@ export async function GET(request: NextRequest) {
   }
 
   const query = q.trim();
+  const korean = hasKorean(query);
 
-  // 한국어가 포함된 경우 내장 목록(주식 + 암호화폐)에서 검색
-  if (hasKorean(query)) {
-    const krResults = searchKrStocks(query);
-    const cryptoResults = searchCrypto(query);
-    return Response.json([...krResults, ...cryptoResults].slice(0, 8));
+  // 내장 목록(주식 + 암호화폐). 한글 이름이 확실하므로 Yahoo 결과보다 앞에 둔다.
+  const local = merge(searchKrStocks(query, korean), searchCrypto(query));
+
+  // Yahoo 검색은 한글 질의를 거부한다(Invalid Search Query). 내장 목록으로만 답한다.
+  if (korean) {
+    return Response.json(local);
   }
 
-  // 암호화폐 영문/티커 검색 우선
-  const cryptoMatches = searchCrypto(query);
-
-  // 영문/숫자 → Yahoo Finance 검색
   try {
-    const result = await yahooFinance.search(query);
-    const quotes = (result.quotes ?? [])
-      .filter((item) => item.symbol)
-      .slice(0, 8)
-      .map((item) => {
-        const anyItem = item as Record<string, unknown>;
-        return {
-          ticker: item.symbol as string,
-          name: (anyItem.shortname as string | undefined)
-            ?? (anyItem.longname as string | undefined)
-            ?? item.symbol as string,
-          typeDisp: (anyItem.typeDisp as string | undefined) ?? '',
-        };
-      });
-
-    // 암호화폐 결과를 앞에 배치하고 중복 제거
-    const cryptoTickers = new Set(cryptoMatches.map((c) => c.ticker));
-    const filtered = quotes.filter((q) => !cryptoTickers.has(q.ticker));
-    return Response.json([...cryptoMatches, ...filtered].slice(0, 8));
+    return Response.json(merge(local, await searchYahoo(query)));
   } catch {
     // Yahoo Finance 검색 실패 시 내장 목록에서 폴백
-    return Response.json([...searchKrStocks(query), ...cryptoMatches].slice(0, 8));
+    return Response.json(local);
   }
 }

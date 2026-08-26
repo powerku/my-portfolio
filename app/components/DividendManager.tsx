@@ -1,0 +1,502 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import AppHeader from '@/app/components/AppHeader';
+import { type Asset, CATEGORY_COLORS } from '@/app/lib/portfolio';
+import { fetchAssets } from '@/app/lib/portfolio-db';
+import { resolveAssetName } from '@/app/lib/kr-assets';
+import {
+  type DividendInfo,
+  formatExDate,
+  formatPerShare,
+  frequencyLabel,
+} from '@/app/lib/dividend';
+import {
+  type Quote,
+  EXCHANGE_RATE_TICKER,
+  assetValueKRW,
+  fetchQuotes,
+  formatKRW,
+  formatKorean,
+  toMessage,
+} from '@/app/lib/quotes';
+
+/** 배당 정보를 한 번에 조회. 실패하면 빈 결과를 돌려준다. */
+async function fetchDividends(tickers: string[]): Promise<Record<string, DividendInfo>> {
+  if (tickers.length === 0) return {};
+  try {
+    const res = await fetch(`/api/dividend?tickers=${encodeURIComponent(tickers.join(','))}`);
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 배당금(표시 통화) → 원화.
+ *
+ * 배당 통화는 Yahoo가 준 값을 그대로 쓰기 때문에 원/달러 말고도 올 수 있다.
+ * 환산할 수 없으면 null을 돌려주고, 합계에서는 빼고 화면에는 '—'로 표시한다.
+ */
+function dividendToKRW(amount: number, currency: string, exchangeRate: number): number | null {
+  if (currency === 'KRW') return amount;
+  if (currency === 'USD') return exchangeRate > 0 ? amount * exchangeRate : null;
+  return null;
+}
+
+/** 한 종목의 배당 현황. 배당 정보를 아직 못 받았거나 무배당이면 금액이 0/null이다. */
+interface DividendRow {
+  asset: Asset;
+  name: string;
+  info: DividendInfo | undefined;
+  /** 시가 배당률(%). 시세를 못 받으면 null */
+  yieldPct: number | null;
+  /** 보유분 연간 배당금(원). 환산할 수 없으면 null */
+  annualKRW: number | null;
+  /** 월별(1~12월) 보유분 배당금(원) */
+  monthlyKRW: number[];
+}
+
+function buildRow(
+  asset: Asset,
+  info: DividendInfo | undefined,
+  quote: Quote | undefined,
+  exchangeRate: number,
+): DividendRow {
+  const name = resolveAssetName(asset.ticker, { shortName: quote?.shortName });
+  const annualPerShare = info?.annualPerShare ?? 0;
+
+  return {
+    asset,
+    name,
+    info,
+    // 시가 배당률 = 주당 연간 배당금 / 현재가. 둘 다 시세 통화라 환율이 필요 없다.
+    yieldPct:
+      info && quote?.price != null && quote.price > 0 ? (annualPerShare / quote.price) * 100 : null,
+    annualKRW: info ? dividendToKRW(annualPerShare * asset.quantity, info.currency, exchangeRate) : null,
+    // 월별 합계를 더할 때 자리가 비지 않도록 항상 12칸을 만든다.
+    monthlyKRW: Array.from({ length: 12 }, (_, month) => {
+      const perShare = info?.monthlyPerShare?.[month] ?? 0;
+      return (info ? dividendToKRW(perShare * asset.quantity, info.currency, exchangeRate) : null) ?? 0;
+    }),
+  };
+}
+
+function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center justify-between px-1">
+      <h2 className="text-[17px] font-bold text-gray-900">{children}</h2>
+      {action}
+    </div>
+  );
+}
+
+/** 분류 색을 쓴 티커 배지 */
+function TickerAvatar({ asset }: { asset: Asset }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+      style={{ backgroundColor: CATEGORY_COLORS[asset.category] }}
+    >
+      {asset.ticker.slice(0, 2)}
+    </span>
+  );
+}
+
+/** 배당 주기 배지. 무배당은 눌린 색으로 구분한다. */
+function FrequencyChip({ paymentsPerYear }: { paymentsPerYear: number | undefined }) {
+  if (paymentsPerYear == null) return <span className="text-gray-300">—</span>;
+  return (
+    <span
+      className={`chip ${paymentsPerYear > 0 ? 'bg-brand-soft text-brand' : 'bg-gray-100 text-gray-400'}`}
+    >
+      {frequencyLabel(paymentsPerYear)}
+    </span>
+  );
+}
+
+/** 주당 배당금 + 그 배당의 배당락일 */
+function PerShare({ info }: { info: DividendInfo | undefined }) {
+  if (!info || info.lastPerShare == null) return <span className="text-gray-300">—</span>;
+  return (
+    <>
+      <span className="block">{formatPerShare(info.lastPerShare, info.currency)}</span>
+      {info.lastExDate && (
+        <span className="block text-[12px] font-normal text-gray-400">
+          {formatExDate(info.lastExDate)} 기준
+        </span>
+      )}
+    </>
+  );
+}
+
+/** 다음 배당락일. 확정 일자가 없으면 배당 주기로 추정한 값임을 함께 알린다. */
+function NextExDate({ info }: { info: DividendInfo | undefined }) {
+  if (!info?.nextExDate) return <span className="text-gray-300">—</span>;
+  return (
+    <>
+      <span className="block">{formatExDate(info.nextExDate, { withYear: true })}</span>
+      {info.nextExDateEstimated && (
+        <span className="block text-[12px] font-normal text-gray-400">예상</span>
+      )}
+    </>
+  );
+}
+
+/** 연간 배당금(보유분) + 월 평균 */
+function AnnualAmount({ annualKRW }: { annualKRW: number | null }) {
+  if (annualKRW == null) return <span className="text-gray-300">—</span>;
+  return (
+    <>
+      <span className="block">{formatKRW(annualKRW)}원</span>
+      <span className="block text-[12px] font-normal text-gray-400">
+        월 {formatKRW(annualKRW / 12)}원
+      </span>
+    </>
+  );
+}
+
+/** 최근 1년 실적을 달마다 모아 보여주는 막대그래프 */
+function MonthlyChart({ monthlyKRW, currentMonth }: { monthlyKRW: number[]; currentMonth: number }) {
+  const max = Math.max(...monthlyKRW);
+  if (max <= 0) return null;
+
+  return (
+    <section>
+      <SectionTitle>월별 배당</SectionTitle>
+      <div className="card px-4 py-6 sm:px-6">
+        <div className="flex items-end gap-1 sm:gap-2">
+          {monthlyKRW.map((amount, index) => {
+            const month = index + 1;
+            const isCurrent = month === currentMonth;
+
+            return (
+              <div key={month} className="min-w-0 flex-1">
+                <p className="tnum hidden h-4 text-center text-[10px] font-semibold text-gray-500 sm:block">
+                  {amount > 0 ? formatKorean(Math.round(amount)) : ''}
+                </p>
+                <div className="flex h-32 items-end">
+                  <div
+                    role="img"
+                    aria-label={`${month}월 ${formatKRW(Math.round(amount))}원`}
+                    title={`${month}월 ${formatKRW(Math.round(amount))}원`}
+                    className={`w-full rounded-t-[5px] transition-[height] duration-300 ${
+                      amount > 0 ? (isCurrent ? 'bg-brand' : 'bg-brand/35') : 'bg-gray-100'
+                    }`}
+                    // 금액이 아주 적은 달도 막대가 보이도록 최소 높이를 준다.
+                    style={{ height: amount > 0 ? `max(${(amount / max) * 100}%, 4px)` : '3px' }}
+                  />
+                </div>
+                <p
+                  className={`mt-2 text-center text-[11px] ${
+                    isCurrent ? 'font-bold text-brand' : 'text-gray-400'
+                  }`}
+                >
+                  {month}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** 표가 들어가지 않는 좁은 화면용 종목 카드 */
+function DividendCard({ row }: { row: DividendRow }) {
+  const { asset, name, info, yieldPct, annualKRW } = row;
+
+  return (
+    <li className="border-b border-gray-100 px-5 py-4 last:border-b-0">
+      <div className="flex items-start gap-3">
+        <TickerAvatar asset={asset} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold text-gray-900">{name}</p>
+          <p className="mt-0.5 flex items-center gap-1 text-[12px] text-gray-400">
+            <span className="truncate">{asset.ticker}</span>
+            <span aria-hidden="true">·</span>
+            <span className="shrink-0">{asset.quantity.toLocaleString()}주</span>
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="tnum text-[15px] font-bold text-gray-900">
+            {annualKRW != null ? `${formatKRW(annualKRW)}원` : '—'}
+          </p>
+          <p className="tnum mt-0.5 text-[12px] text-gray-500">
+            {annualKRW != null ? `월 ${formatKRW(annualKRW / 12)}원` : '연간 배당금'}
+          </p>
+        </div>
+      </div>
+
+      <dl className="mt-3.5 grid grid-cols-3 gap-3 rounded-2xl bg-gray-50 px-4 py-3">
+        <div className="min-w-0">
+          <dt className="text-[11px] font-medium text-gray-500">주당 배당금</dt>
+          <dd className="tnum mt-0.5 text-[13px] font-semibold text-gray-800">
+            <PerShare info={info} />
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-[11px] font-medium text-gray-500">시가 배당률</dt>
+          <dd className="tnum mt-0.5 text-[13px] font-semibold text-gray-800">
+            {yieldPct != null ? `${yieldPct.toFixed(2)}%` : '—'}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-[11px] font-medium text-gray-500">다음 배당락일</dt>
+          <dd className="tnum mt-0.5 text-[13px] font-semibold text-gray-800">
+            <NextExDate info={info} />
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-3">
+        <FrequencyChip paymentsPerYear={info?.paymentsPerYear} />
+      </div>
+    </li>
+  );
+}
+
+/** 표 열 정의. 좁은 화면 카드와 같은 값을 보여준다. */
+const COLUMNS: { label: string; align: 'left' | 'right' }[] = [
+  { label: '종목', align: 'left' },
+  { label: '주당 배당금', align: 'right' },
+  { label: '배당 주기', align: 'left' },
+  { label: '시가 배당률', align: 'right' },
+  { label: '다음 배당락일', align: 'right' },
+  { label: '연간 배당금', align: 'right' },
+];
+
+export default function DividendManager({ userId, userEmail }: { userId: string; userEmail: string }) {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [dividends, setDividends] = useState<Record<string, DividendInfo>>({});
+  const [exchangeRate, setExchangeRate] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  /** 배당 정보를 받아둔 티커 목록. 보유 종목과 다르면 아직 불러오는 중이다. */
+  const [loadedTickerKey, setLoadedTickerKey] = useState('');
+  const [syncError, setSyncError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const serverAssets = await fetchAssets();
+        if (!cancelled) setAssets(serverAssets);
+      } catch (e) {
+        if (!cancelled) setSyncError(toMessage(e, '보유 자산을 불러오지 못했습니다.'));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // 보유 티커 목록. 구성이 바뀔 때만 다시 불러오도록 문자열로 만든다.
+  const tickerKey = [...new Set(assets.map((a) => a.ticker))].sort().join(',');
+
+  // 시세·환율과 배당 정보를 함께 불러온다. 배당 정보가 느려도 시세는 먼저 반영된다.
+  useEffect(() => {
+    if (isLoading || !tickerKey) return;
+
+    let cancelled = false;
+    const tickers = tickerKey.split(',');
+
+    fetchQuotes([EXCHANGE_RATE_TICKER, ...tickers]).then((result) => {
+      if (cancelled) return;
+      const rate = result[EXCHANGE_RATE_TICKER];
+      if (rate?.price != null && rate.price > 0) setExchangeRate(rate.price);
+      setQuotes((prev) => ({ ...prev, ...result }));
+    });
+
+    fetchDividends(tickers).then((result) => {
+      if (cancelled) return;
+      setDividends((prev) => ({ ...prev, ...result }));
+      setLoadedTickerKey(tickerKey);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, tickerKey]);
+
+  const rows = assets
+    .map((asset) => buildRow(asset, dividends[asset.ticker], quotes[asset.ticker], exchangeRate))
+    .sort((a, b) => (b.annualKRW ?? 0) - (a.annualKRW ?? 0));
+
+  const annualTotal = rows.reduce((sum, row) => sum + (row.annualKRW ?? 0), 0);
+  const monthlyTotals = rows.reduce(
+    (totals, row) => totals.map((amount, month) => amount + row.monthlyKRW[month]),
+    Array<number>(12).fill(0),
+  );
+
+  const isFetchingDividends = tickerKey !== '' && loadedTickerKey !== tickerKey;
+  const currentMonth = new Date().getMonth() + 1;
+  const totalEval = assets.reduce(
+    (sum, asset) => sum + assetValueKRW(asset, quotes[asset.ticker], exchangeRate > 0 ? exchangeRate : 1),
+    0,
+  );
+  const portfolioYield = totalEval > 0 ? (annualTotal / totalEval) * 100 : null;
+  const payingCount = rows.filter((row) => (row.info?.paymentsPerYear ?? 0) > 0).length;
+
+  if (isLoading) {
+    return (
+      <>
+        <AppHeader userEmail={userEmail} exchangeRate={exchangeRate} active="/dividend" />
+        <div className="mx-auto w-full max-w-5xl space-y-4 px-5 py-8">
+          <div className="h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
+          <div className="h-36 animate-pulse rounded-[20px] bg-gray-200" />
+          <div className="h-64 animate-pulse rounded-[20px] bg-gray-200" />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AppHeader userEmail={userEmail} exchangeRate={exchangeRate} active="/dividend" />
+
+      <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
+        {syncError && (
+          <div className="rounded-2xl bg-up-soft px-4 py-3 text-[14px] font-medium text-up">{syncError}</div>
+        )}
+
+        {assets.length === 0 ? (
+          <div className="card flex flex-col items-center px-6 py-14 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-[20px]">💸</span>
+            <p className="mt-4 text-[15px] font-semibold text-gray-900">아직 등록한 자산이 없어요</p>
+            <p className="mt-1 text-[13px] text-gray-500">자산을 등록하면 받을 배당금을 계산해 드려요.</p>
+            <Link href="/" className="btn btn-primary btn-md mt-5 px-6">
+              자산 등록하러 가기
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* 배당 요약 */}
+            <section className="card overflow-hidden">
+              <div className="p-6">
+                <p className="text-[14px] font-medium text-gray-500">연간 예상 배당금</p>
+                <p className="tnum mt-1 text-[34px] font-bold leading-tight text-gray-900">
+                  {formatKRW(annualTotal)}
+                  <span className="ml-1 text-[22px] font-bold text-gray-700">원</span>
+                </p>
+                <p className="tnum mt-2 text-[15px] font-semibold text-gray-500">
+                  월 평균 {formatKRW(annualTotal / 12)}원
+                </p>
+              </div>
+              <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100">
+                <div className="px-4 py-4 sm:px-6">
+                  <p className="text-[13px] text-gray-500">{currentMonth}월 예상</p>
+                  <p className="tnum mt-0.5 text-[16px] font-bold text-gray-900">
+                    {formatKRW(monthlyTotals[currentMonth - 1])}원
+                  </p>
+                </div>
+                <div className="px-4 py-4 sm:px-6">
+                  <p className="text-[13px] text-gray-500">포트폴리오 배당률</p>
+                  <p className="tnum mt-0.5 text-[16px] font-bold text-gray-900">
+                    {portfolioYield != null ? `${portfolioYield.toFixed(2)}%` : '—'}
+                  </p>
+                </div>
+                <div className="px-4 py-4 sm:px-6">
+                  <p className="text-[13px] text-gray-500">배당 종목</p>
+                  <p className="tnum mt-0.5 text-[16px] font-bold text-gray-900">{payingCount}개</p>
+                </div>
+              </div>
+            </section>
+
+            <MonthlyChart monthlyKRW={monthlyTotals} currentMonth={currentMonth} />
+
+            {/* 종목별 배당 */}
+            <section>
+              <SectionTitle
+                action={
+                  isFetchingDividends ? (
+                    <span className="text-[13px] font-medium text-gray-400">배당 정보 불러오는 중</span>
+                  ) : undefined
+                }
+              >
+                종목별 배당
+              </SectionTitle>
+
+              {/* 좁은 화면: 카드 목록 */}
+              <ul className="card overflow-hidden lg:hidden">
+                {rows.map((row) => (
+                  <DividendCard key={row.asset.id} row={row} />
+                ))}
+              </ul>
+
+              {/* 넓은 화면: 표 */}
+              <div className="card hidden overflow-x-auto lg:block">
+                <table className="w-full min-w-[780px] text-[14px]">
+                  <thead className="text-[12px] font-semibold text-gray-500">
+                    <tr className="border-b border-gray-100">
+                      {COLUMNS.map(({ label, align }) => (
+                        <th
+                          key={label}
+                          className={`whitespace-nowrap px-3 py-3 ${
+                            align === 'left' ? 'text-left' : 'text-right'
+                          }`}
+                        >
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ asset, name, info, yieldPct, annualKRW }) => (
+                      <tr
+                        key={asset.id}
+                        className="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50"
+                      >
+                        <td className="px-3 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <TickerAvatar asset={asset} />
+                            <span className="min-w-0">
+                              <span className="block max-w-[200px] truncate font-semibold text-gray-900">
+                                {name}
+                              </span>
+                              <span className="block text-[12px] text-gray-400">
+                                {asset.ticker} · {asset.quantity.toLocaleString()}주
+                              </span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right text-gray-800">
+                          <PerShare info={info} />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <FrequencyChip paymentsPerYear={info?.paymentsPerYear} />
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right font-semibold text-gray-800">
+                          {yieldPct != null ? `${yieldPct.toFixed(2)}%` : '—'}
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right text-gray-800">
+                          <NextExDate info={info} />
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right font-bold text-gray-900">
+                          <AnnualAmount annualKRW={annualKRW} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <p className="px-1 text-[12px] leading-relaxed text-gray-400">
+              최근 1년간 실제 지급된 배당을 기준으로 계산한 예상 금액이에요. 배당금이 바뀌거나 배당을
+              건너뛰면 실제 금액과 달라질 수 있고, 배당소득세는 반영하지 않았어요.
+            </p>
+          </>
+        )}
+      </main>
+    </>
+  );
+}
