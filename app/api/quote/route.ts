@@ -1,23 +1,92 @@
 import YahooFinance from 'yahoo-finance2';
+import { unstable_cache } from 'next/cache';
 import { type NextRequest } from 'next/server';
 
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
+/** 시세를 재사용하는 시간(초) */
+const REVALIDATE_SECONDS = 60;
+
+/** 한 번에 조회할 티커 수 상한 */
+const MAX_TICKERS = 50;
+
+interface QuoteResult {
+  ticker: string;
+  shortName: string;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+}
+
+/**
+ * 티커 목록을 Yahoo Finance에 한 번에 물어보고 티커별로 정리해 돌려준다.
+ *
+ * unstable_cache의 캐시 키에 인자가 포함되므로, 같은 티커 조합이면
+ * REVALIDATE_SECONDS 동안 Yahoo를 다시 호출하지 않는다. 호출부에서 티커를
+ * 정렬·중복 제거해 넘겨야 캐시가 제대로 맞는다.
+ */
+const getQuotes = unstable_cache(
+  async (tickers: string[]): Promise<Record<string, QuoteResult>> => {
+    const quotes = await yahooFinance.quote(tickers);
+
+    const bySymbol = new Map(
+      quotes.map((q) => [
+        q.symbol.toUpperCase(),
+        {
+          ticker: q.symbol,
+          shortName: q.shortName ?? q.symbol,
+          price: q.regularMarketPrice ?? null,
+          change: q.regularMarketChange ?? null,
+          changePercent: q.regularMarketChangePercent ?? null,
+        },
+      ]),
+    );
+
+    // 요청한 티커를 키로 돌려준다. 상장폐지 등으로 Yahoo가 빼먹은 티커는 생략된다.
+    const result: Record<string, QuoteResult> = {};
+    for (const ticker of tickers) {
+      const quote = bySymbol.get(ticker.toUpperCase());
+      if (quote) result[ticker] = quote;
+    }
+    return result;
+  },
+  ['quotes'],
+  { revalidate: REVALIDATE_SECONDS },
+);
+
+/**
+ * GET /api/quote?tickers=AAPL,005930.KS,USDKRW=X
+ *
+ * 응답은 요청한 티커를 키로 하는 객체다. (`ticker` 파라미터도 같은 뜻으로 받는다)
+ */
 export async function GET(request: NextRequest) {
-  const ticker = request.nextUrl.searchParams.get('ticker');
+  const params = request.nextUrl.searchParams;
+  const tickers = [
+    ...new Set(
+      [...params.getAll('tickers'), ...params.getAll('ticker')]
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ].sort();
 
-  if (!ticker) {
-    return Response.json({ error: 'ticker 파라미터가 필요합니다.' }, { status: 400 });
+  if (tickers.length === 0) {
+    return Response.json({ error: 'tickers 파라미터가 필요합니다.' }, { status: 400 });
+  }
+  if (tickers.length > MAX_TICKERS) {
+    return Response.json(
+      { error: `한 번에 최대 ${MAX_TICKERS}개까지 조회할 수 있습니다.` },
+      { status: 400 },
+    );
   }
 
   try {
-    const quote = await yahooFinance.quote(ticker);
-    return Response.json({
-      ticker,
-      shortName: quote.shortName ?? ticker,
-      price: quote.regularMarketPrice ?? null,
-      change: quote.regularMarketChange ?? null,
-      changePercent: quote.regularMarketChangePercent ?? null,
+    const quotes = await getQuotes(tickers);
+    return Response.json(quotes, {
+      // 시세는 사용자별 데이터가 아니므로 CDN에서도 잠깐 재사용해도 된다.
+      headers: {
+        'Cache-Control': `public, max-age=0, s-maxage=${REVALIDATE_SECONDS}, stale-while-revalidate=${REVALIDATE_SECONDS * 5}`,
+      },
     });
   } catch {
     return Response.json({ error: '시세를 불러오는 데 실패했습니다.' }, { status: 500 });

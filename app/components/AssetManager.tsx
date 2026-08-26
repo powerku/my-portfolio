@@ -64,6 +64,22 @@ function quotePriceToKRW(price: number, asset: Asset, exchangeRate: number): num
   return getQuoteCurrency(asset.ticker) === 'USD' ? price * exchangeRate : price;
 }
 
+/** 원/달러 환율도 시세와 같은 방식으로 조회한다 */
+const EXCHANGE_RATE_TICKER = 'USDKRW=X';
+
+/** 여러 티커 시세를 한 번에 조회. 실패하면 빈 결과를 돌려준다. */
+async function fetchQuotes(tickers: string[]): Promise<Record<string, Quote>> {
+  if (tickers.length === 0) return {};
+  try {
+    const res = await fetch(`/api/quote?tickers=${encodeURIComponent(tickers.join(','))}`);
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    // 시세 조회 실패 시 매수 단가 기준으로 계산되므로 무시한다.
+    return {};
+  }
+}
+
 /** 통화 선택 세그먼트 컨트롤 */
 function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Currency) => void }) {
   return (
@@ -718,7 +734,6 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
       }
     })();
 
-    fetchExchangeRate();
     return () => {
       cancelled = true;
     };
@@ -749,35 +764,29 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
     scheduleAllocationSave(next);
   }
 
+  // 보유 티커 목록. 구성이 바뀔 때만 시세를 다시 불러오도록 문자열로 만든다.
+  const tickerKey = [...new Set(assets.map((a) => a.ticker))].sort().join(',');
+
+  // 환율과 보유 종목 시세를 한 번의 요청으로 가져온다.
   useEffect(() => {
-    if (assets.length === 0) return;
-    const tickers = [...new Set(assets.map((a) => a.ticker))];
-    tickers.forEach(fetchQuote);
-  }, [assets]);
+    if (isLoading) return;
 
-  async function fetchExchangeRate() {
-    try {
-      const res = await fetch(`/api/quote?ticker=${encodeURIComponent('USDKRW=X')}`);
-      const data: Quote = await res.json();
-      if (res.ok && data.price != null && data.price > 0) {
-        setExchangeRate(data.price);
-      }
-    } catch {
-      // 환율 조회 실패 시 무시
-    }
-  }
+    let cancelled = false;
+    const tickers = tickerKey ? tickerKey.split(',') : [];
 
-  async function fetchQuote(t: string) {
-    try {
-      const res = await fetch(`/api/quote?ticker=${encodeURIComponent(t)}`);
-      const data: Quote = await res.json();
-      if (res.ok) {
-        setQuotes((prev) => ({ ...prev, [t]: data }));
-      }
-    } catch {
-      // 시세 조회 실패 시 무시
-    }
-  }
+    (async () => {
+      const result = await fetchQuotes([EXCHANGE_RATE_TICKER, ...tickers]);
+      if (cancelled) return;
+
+      const rate = result[EXCHANGE_RATE_TICKER];
+      if (rate?.price != null && rate.price > 0) setExchangeRate(rate.price);
+      setQuotes((prev) => ({ ...prev, ...result }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, tickerKey]);
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -817,7 +826,6 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
       }
       setSyncError('');
       setAssets((prev) => [...prev, newAsset]);
-      fetchQuote(newAsset.ticker);
       search.reset();
       setQuantity('');
       setPurchasePrice('');
@@ -839,14 +847,12 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
   async function handleEditSave(updated: Asset) {
     const previous = assets;
-    const previousTicker = editingAsset?.ticker;
     setSyncError('');
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     setEditingAsset(null);
 
     try {
       await upsertAsset(updated, userId);
-      if (updated.ticker !== previousTicker) fetchQuote(updated.ticker);
     } catch (err) {
       setAssets(previous);
       setSyncError(toMessage(err, '자산을 수정하지 못했습니다.'));
