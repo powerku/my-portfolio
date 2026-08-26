@@ -1,26 +1,192 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 토스/뱅크샐러드 계열 한국 핀테크 UI 토큰 */
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f2f4f6;
+  --color-gray-200: #e5e8eb;
+  --color-gray-300: #d1d6db;
+  --color-gray-400: #b0b8c1;
+  --color-gray-500: #8b95a1;
+  --color-gray-600: #6b7684;
+  --color-gray-700: #4e5968;
+  --color-gray-800: #333d4b;
+  --color-gray-900: #191f28;
+
+  /* 브랜드 */
+  --color-brand: #3182f6;
+  --color-brand-hover: #1b64da;
+  --color-brand-soft: #e8f3ff;
+
+  /* 국내 증시 관례: 상승 빨강 / 하락 파랑 */
+  --color-up: #f04452;
+  --color-up-soft: #fff0f2;
+  --color-down: #3182f6;
+  --color-down-soft: #e8f3ff;
+  --color-warn: #ff9500;
+  --color-warn-soft: #fff6e5;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.06), 0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-gray-100);
+    color: var(--color-gray-900);
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.03em;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* 숫자 입력의 스피너는 금액/수량 입력에서 오조작을 유발해 숨긴다. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* 금액/비율은 자릿수가 흔들리지 않도록 고정폭 숫자 사용 */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .field {
+    width: 100%;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    background: var(--color-gray-100);
+    padding: 0.8125rem 1rem;
+    /* 16px 미만이면 iOS Safari가 포커스 시 화면을 확대한다. */
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-gray-900);
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .field::placeholder {
+    color: var(--color-gray-400);
+    font-weight: 400;
+  }
+
+  .field:focus {
+    outline: none;
+    background: #fff;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.14);
+  }
+
+  .field-sm {
+    border-radius: 10px;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+  }
+
+  .field-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%238b95a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.875rem center;
+    padding-right: 2.5rem;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.4375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-gray-600);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 14px;
+    font-weight: 700;
+    transition: background-color 0.15s, color 0.15s, transform 0.08s;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+
+  .btn-lg {
+    height: 3.375rem;
+    padding: 0 1.25rem;
+    font-size: 1rem;
+  }
+
+  .btn-md {
+    height: 3rem;
+    padding: 0 1rem;
+    font-size: 0.9375rem;
+  }
+
+  .btn-primary {
+    background: var(--color-brand);
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-hover);
+  }
+
+  .btn-primary:disabled {
+    background: var(--color-gray-200);
+    color: var(--color-gray-400);
+  }
+
+  .btn-secondary {
+    background: var(--color-gray-100);
+    color: var(--color-gray-700);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-gray-200);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 999px;
+    padding: 0.1875rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
 }

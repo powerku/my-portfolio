@@ -9,7 +9,8 @@ import {
   type Currency,
   CATEGORIES,
   CATEGORY_COLORS,
-  emptyAllocations,
+  defaultAllocations,
+  hasAllocations,
 } from '@/app/lib/portfolio';
 import {
   deleteAsset as deleteAssetRow,
@@ -63,28 +64,24 @@ function quotePriceToKRW(price: number, asset: Asset, exchangeRate: number): num
   return getQuoteCurrency(asset.ticker) === 'USD' ? price * exchangeRate : price;
 }
 
-/** 통화 선택 토글 버튼 */
+/** 통화 선택 세그먼트 컨트롤 */
 function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Currency) => void }) {
   return (
-    <div className="flex rounded border overflow-hidden text-xs">
-      <button
-        type="button"
-        onClick={() => onChange('KRW')}
-        className={`px-2 py-0.5 transition-colors ${
-          value === 'KRW' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-        }`}
-      >
-        ₩ 원
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange('USD')}
-        className={`px-2 py-0.5 border-l transition-colors ${
-          value === 'USD' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-        }`}
-      >
-        $ 달러
-      </button>
+    <div className="flex gap-0.5 rounded-[10px] bg-gray-100 p-0.5 text-[12px] font-semibold">
+      {(['KRW', 'USD'] as const).map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          className={`rounded-lg px-2.5 py-1 transition-colors ${
+            value === c
+              ? 'bg-white text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {c === 'KRW' ? '₩ 원' : '$ 달러'}
+        </button>
+      ))}
     </div>
   );
 }
@@ -203,27 +200,29 @@ function TickerInput({
         onFocus={onFocus}
         placeholder="종목명 또는 코드 검색"
         autoComplete="off"
-        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="field"
       />
       {isSearching && (
-        <span className="absolute right-3 top-2.5 text-gray-400 text-xs">검색 중...</span>
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[12px] font-medium text-gray-400">
+          검색 중
+        </span>
       )}
       {showDropdown && (
-        <ul className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto text-sm">
+        <ul className="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl bg-white py-1 shadow-pop">
           {suggestions.map((item, idx) => (
             <li
               key={item.ticker}
               onMouseDown={() => onSelect(item)}
-              className={`flex items-center justify-between px-3 py-2 cursor-pointer ${
-                idx === activeIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
+              className={`flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 transition-colors ${
+                idx === activeIndex ? 'bg-brand-soft' : 'hover:bg-gray-50'
               }`}
             >
-              <span>
-                <span className="font-medium">{item.ticker}</span>
-                <span className="text-gray-500 ml-2">{item.name}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-[14px] font-semibold text-gray-900">{item.name}</span>
+                <span className="block text-[12px] text-gray-500">{item.ticker}</span>
               </span>
               {item.typeDisp && (
-                <span className="text-xs text-gray-400 ml-2 shrink-0">{item.typeDisp}</span>
+                <span className="chip shrink-0 bg-gray-100 text-gray-500">{item.typeDisp}</span>
               )}
             </li>
           ))}
@@ -245,7 +244,9 @@ function USDInput({
 }) {
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">$</span>
+      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] font-semibold text-gray-500">
+        $
+      </span>
       <input
         type="number"
         value={value}
@@ -253,7 +254,7 @@ function USDInput({
         placeholder={placeholder}
         min="0"
         step="any"
-        className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="field tnum pl-8"
       />
     </div>
   );
@@ -286,16 +287,9 @@ function formatKorean(value: number) {
   return value.toLocaleString();
 }
 
-function DonutChart({
-  assets,
-  quotes,
-  exchangeRate,
-}: {
-  assets: Asset[];
-  quotes: Record<string, Quote>;
-  exchangeRate: number;
-}) {
-  const categoryTotals = CATEGORIES.reduce<Record<AssetCategory, number>>((acc, cat) => {
+/** 카테고리별 원화 평가금액 합계 */
+function getCategoryTotals(assets: Asset[], quotes: Record<string, Quote>, exchangeRate: number) {
+  return CATEGORIES.reduce<Record<AssetCategory, number>>((acc, cat) => {
     acc[cat] = assets
       .filter((a) => a.category === cat)
       .reduce((sum, a) => {
@@ -307,51 +301,86 @@ function DonutChart({
       }, 0);
     return acc;
   }, {} as Record<AssetCategory, number>);
+}
+
+function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center justify-between px-1">
+      <h2 className="text-[17px] font-bold text-gray-900">{children}</h2>
+      {action}
+    </div>
+  );
+}
+
+function DonutChart({
+  assets,
+  quotes,
+  exchangeRate,
+}: {
+  assets: Asset[];
+  quotes: Record<string, Quote>;
+  exchangeRate: number;
+}) {
+  const categoryTotals = getCategoryTotals(assets, quotes, exchangeRate);
 
   const total = Object.values(categoryTotals).reduce((s, v) => s + v, 0);
   if (total === 0) return null;
 
   const activeCategories = CATEGORIES.filter((c) => categoryTotals[c] > 0);
 
-  const cx = 100, cy = 100, outerR = 80, innerR = 52;
-  let currentAngle = 0;
+  const cx = 100, cy = 100, outerR = 82, innerR = 58;
+  const segments: { cat: AssetCategory; path: string }[] = [];
+  let startAngle = 0;
 
-  const segments = activeCategories.map((cat) => {
+  for (const cat of activeCategories) {
     const sweepAngle = (categoryTotals[cat] / total) * 360;
-    const path = arcPath(cx, cy, outerR, innerR, currentAngle, currentAngle + sweepAngle);
-    currentAngle += sweepAngle;
-    return { cat, path };
-  });
+    // 조각 사이에 1.5도 간격을 둬 경계가 또렷하게 보이도록 한다.
+    const gap = sweepAngle > 3 ? 1.5 : 0;
+    segments.push({ cat, path: arcPath(cx, cy, outerR, innerR, startAngle, startAngle + sweepAngle - gap) });
+    startAngle += sweepAngle;
+  }
 
   return (
-    <div className="space-y-2">
-      <h2 className="text-lg font-semibold">자산 분류</h2>
-      <div className="rounded-lg border p-4 flex flex-col sm:flex-row items-center gap-6">
-        <svg viewBox="0 0 200 200" className="w-48 h-48 shrink-0">
-          {segments.map(({ cat, path }) => (
-            <path key={cat} d={path} fill={CATEGORY_COLORS[cat]} />
-          ))}
-          <text x="100" y="94" textAnchor="middle" fontSize="10" fill="#9CA3AF">총 평가금액</text>
-          <text x="100" y="112" textAnchor="middle" fontSize="13" fill="#111827" fontWeight="700">
-            {formatKorean(total)}원
-          </text>
-        </svg>
-        <div className="flex flex-col gap-2 text-sm w-full">
-          {activeCategories.map((cat) => (
-            <div key={cat} className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
-              <span className="flex-1 text-gray-700">{cat}</span>
-              <span className="text-gray-400 w-12 text-right">
-                {Math.round((categoryTotals[cat] / total) * 100)}%
-              </span>
-              <span className="text-gray-800 font-medium w-32 text-right">
-                {Math.round(categoryTotals[cat]).toLocaleString()} 원
-              </span>
-            </div>
-          ))}
+    <section>
+      <SectionTitle>자산 구성</SectionTitle>
+      <div className="card flex flex-col items-center gap-7 p-6 sm:flex-row sm:gap-8">
+        <div className="relative shrink-0">
+          <svg viewBox="0 0 200 200" className="h-44 w-44">
+            {segments.map(({ cat, path }) => (
+              <path key={cat} d={path} fill={CATEGORY_COLORS[cat]} />
+            ))}
+          </svg>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[11px] font-medium text-gray-500">총 평가금액</span>
+            <span className="tnum text-[19px] font-bold text-gray-900">{formatKorean(total)}원</span>
+          </div>
+        </div>
+
+        <div className="flex w-full flex-col gap-3.5">
+          {activeCategories.map((cat) => {
+            const pct = (categoryTotals[cat] / total) * 100;
+            return (
+              <div key={cat}>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                  <span className="flex-1 text-[14px] font-semibold text-gray-800">{cat}</span>
+                  <span className="tnum text-[14px] font-bold text-gray-900">{pct.toFixed(0)}%</span>
+                  <span className="tnum w-28 text-right text-[13px] text-gray-500">
+                    {Math.round(categoryTotals[cat]).toLocaleString()}원
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${pct}%`, backgroundColor: CATEGORY_COLORS[cat] }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -408,15 +437,19 @@ function EditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 backdrop-blur-[2px] sm:items-center"
+      onMouseDown={onClose}
+    >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4"
+        className="w-full max-w-md rounded-t-[24px] bg-white p-6 pb-8 shadow-pop sm:rounded-[24px] sm:pb-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold">자산 수정</h3>
-        <form onSubmit={handleSave} className="space-y-3">
+        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-gray-200 sm:hidden" />
+        <h3 className="mb-5 text-[20px] font-bold text-gray-900">자산 수정</h3>
+        <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">종목 코드</label>
+            <label className="label">종목 코드</label>
             <TickerInput
               value={search.ticker}
               onChange={search.setTicker}
@@ -430,11 +463,11 @@ function EditModal({
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">자산 분류</label>
+            <label className="label">자산 분류</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as AssetCategory)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="field field-select"
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
@@ -443,7 +476,7 @@ function EditModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">수량</label>
+              <label className="label">수량</label>
               <input
                 type="number"
                 value={quantity}
@@ -451,12 +484,12 @@ function EditModal({
                 placeholder="예: 0.001"
                 min="0"
                 step="any"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field tnum"
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm text-gray-600">매수 단가</label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="label mb-0">매수 단가</label>
                 <CurrencyToggle value={purchaseCurrency} onChange={setPurchaseCurrency} />
               </div>
               {purchaseCurrency === 'USD' ? (
@@ -473,25 +506,18 @@ function EditModal({
                   placeholder="예: 28000"
                   min="0"
                   step="any"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="field tnum"
                 />
               )}
             </div>
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <p className="text-[13px] font-medium text-up">{error}</p>}
           <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              저장
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
+            <button type="button" onClick={onClose} className="btn btn-secondary btn-md flex-1">
               취소
+            </button>
+            <button type="submit" className="btn btn-primary btn-md flex-[1.6]">
+              저장하기
             </button>
           </div>
         </form>
@@ -513,22 +539,11 @@ function AllocationTable({
   targetAllocations: Allocations;
   onChangeTargetAllocations: (allocs: Allocations) => void;
 }) {
-  const categoryTotals = CATEGORIES.reduce<Record<AssetCategory, number>>((acc, cat) => {
-    acc[cat] = assets
-      .filter((a) => a.category === cat)
-      .reduce((sum, a) => {
-        const q = quotes[a.ticker];
-        const priceKRW =
-          q?.price != null
-            ? quotePriceToKRW(q.price, a, exchangeRate)
-            : toKRW(a.purchasePrice, a.purchaseCurrency, exchangeRate);
-        return sum + priceKRW * a.quantity;
-      }, 0);
-    return acc;
-  }, {} as Record<AssetCategory, number>);
+  const categoryTotals = getCategoryTotals(assets, quotes, exchangeRate);
 
   const total = Object.values(categoryTotals).reduce((s, v) => s + v, 0);
   const targetSum = CATEGORIES.reduce((s, c) => s + (Number(targetAllocations[c]) || 0), 0);
+  const isSumOff = targetSum > 0 && Math.abs(targetSum - 100) > 0.01;
 
   function handleChange(cat: AssetCategory, val: string) {
     const num = Math.max(0, Math.min(100, Number(val) || 0));
@@ -536,90 +551,81 @@ function AllocationTable({
   }
 
   return (
-    <div className="space-y-2">
-      <h2 className="text-lg font-semibold">목표 비중</h2>
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr>
-              <th className="text-left p-3">분류</th>
-              <th className="text-right p-3">목표 비중</th>
-              <th className="text-right p-3">현재 비중</th>
-              <th className="text-right p-3">차이</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {CATEGORIES.map((cat) => {
-              const currentPct = total > 0 ? (categoryTotals[cat] / total) * 100 : 0;
-              const target = Number(targetAllocations[cat]) || 0;
-              const diff = currentPct - target;
-              const absDiff = Math.abs(diff);
-              const isAlert = target > 0 && absDiff >= 5;
-              const diffColor = isAlert
-                ? (diff > 0 ? 'text-red-500' : 'text-blue-500')
-                : 'text-gray-600';
-              const diffAmount = total > 0 ? (diff / 100) * total : 0;
+    <section>
+      <SectionTitle
+        action={
+          <span
+            className={`tnum chip ${isSumOff ? 'bg-warn-soft text-warn' : 'bg-gray-100 text-gray-600'}`}
+          >
+            합계 {Number(targetSum.toFixed(1))}%
+          </span>
+        }
+      >
+        목표 비중
+      </SectionTitle>
 
-              return (
-                <tr key={cat} className="hover:bg-gray-50">
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
-                      <span>{cat}</span>
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <input
-                        type="number"
-                        value={targetAllocations[cat] === 0 ? '' : targetAllocations[cat]}
-                        onChange={(e) => handleChange(cat, e.target.value)}
-                        min="0"
-                        max="100"
-                        step="1"
-                        placeholder="0"
-                        className="w-16 border rounded px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="text-gray-500">%</span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-right text-gray-700">
-                    {total > 0 ? `${currentPct.toFixed(1)}%` : '—'}
-                  </td>
-                  <td className={`p-3 text-right font-medium ${diffColor}`}>
-                    {target > 0 && total > 0 ? (
-                      <>
-                        <span>{diff >= 0 ? '+' : ''}{diff.toFixed(1)}%</span>
-                        <span className="block text-xs font-normal">
-                          {diffAmount >= 0 ? '+' : ''}{formatKorean(Math.round(diffAmount))}원
-                        </span>
-                      </>
-                    ) : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot className="bg-gray-50 border-t">
-            <tr>
-              <td className="p-3 font-medium text-gray-700">합계</td>
-              <td className={`p-3 text-right font-medium ${targetSum > 0 && Math.abs(targetSum - 100) > 0.01 ? 'text-amber-500' : 'text-gray-700'}`}>
-                {targetSum > 0 ? `${targetSum.toFixed(1)}%` : '—'}
-              </td>
-              <td className="p-3 text-right font-medium text-gray-700">
-                {total > 0 ? '100.0%' : '—'}
-              </td>
-              <td className="p-3" />
-            </tr>
-          </tfoot>
-        </table>
-        {targetSum > 0 && Math.abs(targetSum - 100) > 0.01 && (
-          <div className="px-3 py-2 bg-amber-50 border-t text-amber-600 text-xs">
-            목표 비중 합계가 100%가 아닙니다 (현재 {targetSum.toFixed(1)}%)
-          </div>
-        )}
+      <div className="card px-5 py-1">
+        {CATEGORIES.map((cat) => {
+          const currentPct = total > 0 ? (categoryTotals[cat] / total) * 100 : 0;
+          const target = Number(targetAllocations[cat]) || 0;
+          const diff = currentPct - target;
+          const absDiff = Math.abs(diff);
+          const isAlert = target > 0 && absDiff >= 5;
+          const diffColor = isAlert ? (diff > 0 ? 'text-up' : 'text-down') : 'text-gray-500';
+          const diffAmount = total > 0 ? (diff / 100) * total : 0;
+
+          return (
+            <div key={cat} className="border-b border-gray-100 py-4 last:border-b-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                  <span className="truncate text-[15px] font-semibold text-gray-900">{cat}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <input
+                    type="number"
+                    value={targetAllocations[cat] === 0 ? '' : targetAllocations[cat]}
+                    onChange={(e) => handleChange(cat, e.target.value)}
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="0"
+                    aria-label={`${cat} 목표 비중`}
+                    className="field field-sm tnum w-16 text-right"
+                  />
+                  <span className="text-[13px] font-medium text-gray-500">%</span>
+                </div>
+              </div>
+
+              {/* 현재 비중 막대 위에 목표 지점을 표시해 차이를 한눈에 보여준다. */}
+              <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-full rounded-full transition-[width] duration-300"
+                  style={{ width: `${Math.min(currentPct, 100)}%`, backgroundColor: CATEGORY_COLORS[cat] }}
+                />
+                {target > 0 && (
+                  <span
+                    className="absolute top-0 h-full w-[2px] rounded-full bg-gray-900/45"
+                    style={{ left: `calc(${Math.min(target, 100)}% - 1px)` }}
+                  />
+                )}
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-[12px]">
+                <span className="tnum text-gray-500">
+                  현재 {total > 0 ? `${currentPct.toFixed(1)}%` : '—'}
+                </span>
+                <span className={`tnum font-semibold ${diffColor}`}>
+                  {target > 0 && total > 0
+                    ? `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}% · ${diffAmount >= 0 ? '+' : '-'}${formatKorean(Math.abs(Math.round(diffAmount)))}원`
+                    : '목표 미설정'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -628,9 +634,40 @@ type SortDir = 'asc' | 'desc';
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
-    <span className={`ml-1 inline-block text-xs ${active ? 'text-blue-500' : 'text-gray-300'}`}>
+    <span className={`ml-0.5 inline-block text-[9px] ${active ? 'text-brand' : 'text-gray-300'}`}>
       {active && dir === 'desc' ? '▼' : '▲'}
     </span>
+  );
+}
+
+function SortHeader({
+  label,
+  sortKey: key,
+  activeKey,
+  dir,
+  onSort,
+  align = 'right',
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+  align?: 'left' | 'right';
+}) {
+  return (
+    <th className={`whitespace-nowrap px-3 py-3 ${align === 'left' ? 'text-left' : 'text-right'}`}>
+      <button
+        type="button"
+        onClick={() => onSort(key)}
+        className={`inline-flex items-center transition-colors hover:text-gray-900 ${
+          align === 'right' ? 'justify-end' : ''
+        } ${activeKey === key ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        <SortIcon active={activeKey === key} dir={dir} />
+      </button>
+    </th>
   );
 }
 
@@ -649,7 +686,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
   const [exchangeRate, setExchangeRate] = useState<number>(0);
   const [sortKey, setSortKey] = useState<SortKey>('category');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [targetAllocations, setTargetAllocations] = useState<Allocations>(emptyAllocations);
+  const [targetAllocations, setTargetAllocations] = useState<Allocations>(defaultAllocations);
 
   const search = useTickerSearch();
   const allocationSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -670,7 +707,10 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
         if (cancelled) return;
 
         setAssets(migrated.assets ?? serverAssets);
-        setTargetAllocations(migrated.allocations ?? serverAllocations);
+
+        // 저장된 목표 비중이 하나도 없으면 기본 배분을 보여준다. (값을 건드릴 때 저장된다)
+        const allocations = migrated.allocations ?? serverAllocations;
+        setTargetAllocations(hasAllocations(allocations) ? allocations : defaultAllocations());
       } catch (e) {
         if (!cancelled) setSyncError(toMessage(e, '데이터를 불러오지 못했습니다.'));
       } finally {
@@ -904,296 +944,324 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <p className="text-gray-400 text-sm text-center py-16">불러오는 중...</p>
+      <div className="mx-auto w-full max-w-5xl space-y-4 px-5 py-8">
+        <div className="h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
+        <div className="h-36 animate-pulse rounded-[20px] bg-gray-200" />
+        <div className="h-64 animate-pulse rounded-[20px] bg-gray-200" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-bold">내 포트폴리오</h1>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="truncate max-w-[180px]">{userEmail}</span>
+    <>
+      <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-3.5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-brand">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path d="M4 17V10" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                <path d="M10 17V6" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                <path d="M16 17v-4" stroke="white" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
+              </svg>
+            </span>
+            <span className="text-[17px] font-bold text-gray-900">내 포트폴리오</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {exchangeRate > 0 && (
+              <span className="tnum chip hidden bg-gray-100 text-gray-600 sm:inline-flex">
+                $1 = {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원
+              </span>
+            )}
+            <span className="hidden max-w-[160px] truncate text-[13px] text-gray-500 md:block">{userEmail}</span>
             <form action={signOut}>
-              <button type="submit" className="hover:text-gray-700 underline underline-offset-2">
+              <button
+                type="submit"
+                className="rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+              >
                 로그아웃
               </button>
             </form>
           </div>
-          {exchangeRate > 0 && (
-            <span className="text-xs text-gray-400">
-              환율 {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원/$
-            </span>
-          )}
         </div>
-      </div>
+      </header>
 
-      {syncError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-          {syncError}
-        </div>
-      )}
+      <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
+        {syncError && (
+          <div className="rounded-2xl bg-up-soft px-4 py-3 text-[14px] font-medium text-up">{syncError}</div>
+        )}
 
-      {editingAsset && (
-        <EditModal
-          asset={editingAsset}
-          onSave={handleEditSave}
-          onClose={() => setEditingAsset(null)}
-        />
-      )}
+        {editingAsset && (
+          <EditModal
+            asset={editingAsset}
+            onSave={handleEditSave}
+            onClose={() => setEditingAsset(null)}
+          />
+        )}
 
-      {/* 요약 카드 */}
-      {assets.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-lg border p-4">
-            <p className="text-sm text-gray-500">총 평가금액</p>
-            <p className="text-lg font-semibold">{totalEval.toLocaleString(undefined, { maximumFractionDigits: 0 })} 원</p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-sm text-gray-500">총 매수금액</p>
-            <p className="text-lg font-semibold">{totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })} 원</p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-sm text-gray-500">평가손익</p>
-            <p className={`text-lg font-semibold ${totalPnl >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
-              {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })} 원
-              <span className="text-sm ml-1">({totalPnlPct.toFixed(2)}%)</span>
+        {/* 총자산 요약 */}
+        <section className="card overflow-hidden">
+          <div className="p-6">
+            <p className="text-[14px] font-medium text-gray-500">총 평가금액</p>
+            <p className="tnum mt-1 text-[34px] font-bold leading-tight text-gray-900">
+              {totalEval.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              <span className="ml-1 text-[22px] font-bold text-gray-700">원</span>
             </p>
+            {assets.length > 0 && (
+              <p className={`tnum mt-2 text-[15px] font-semibold ${totalPnl >= 0 ? 'text-up' : 'text-down'}`}>
+                {totalPnl >= 0 ? '+' : ''}
+                {totalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                <span className="ml-1.5">
+                  ({totalPnl >= 0 ? '+' : ''}
+                  {totalPnlPct.toFixed(2)}%)
+                </span>
+              </p>
+            )}
           </div>
-        </div>
-      )}
+          <div className="grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100">
+            <div className="px-6 py-4">
+              <p className="text-[13px] text-gray-500">총 매수금액</p>
+              <p className="tnum mt-0.5 text-[16px] font-bold text-gray-900">
+                {totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+              </p>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-[13px] text-gray-500">보유 종목</p>
+              <p className="tnum mt-0.5 text-[16px] font-bold text-gray-900">{assets.length}개</p>
+            </div>
+          </div>
+        </section>
 
-      {/* 도넛 차트 */}
-      {assets.length > 0 && <DonutChart assets={assets} quotes={quotes} exchangeRate={rate} />}
+        {/* 도넛 차트 */}
+        {assets.length > 0 && <DonutChart assets={assets} quotes={quotes} exchangeRate={rate} />}
 
-      {/* 목표 비중 */}
-      <AllocationTable
-        assets={assets}
-        quotes={quotes}
-        exchangeRate={rate}
-        targetAllocations={targetAllocations}
-        onChangeTargetAllocations={handleAllocationsChange}
-      />
+        {/* 목표 비중 */}
+        <AllocationTable
+          assets={assets}
+          quotes={quotes}
+          exchangeRate={rate}
+          targetAllocations={targetAllocations}
+          onChangeTargetAllocations={handleAllocationsChange}
+        />
 
-      {/* 자산 목록 */}
-      {assets.length > 0 ? (
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">보유 자산</h2>
-          <div className="rounded-lg border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                  <th className="text-left p-3">
-                    <button type="button" onClick={() => handleSort('ticker')} className="flex items-center hover:text-gray-900">
-                      종목<SortIcon active={sortKey === 'ticker'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-left p-3">
-                    <button type="button" onClick={() => handleSort('category')} className="flex items-center hover:text-gray-900">
-                      분류<SortIcon active={sortKey === 'category'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('currentPrice')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      현재가 (원)<SortIcon active={sortKey === 'currentPrice'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('changePercent')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      등락<SortIcon active={sortKey === 'changePercent'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('quantity')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      수량<SortIcon active={sortKey === 'quantity'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('evalAmount')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      평가 금액<SortIcon active={sortKey === 'evalAmount'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('purchasePrice')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      매수단가<SortIcon active={sortKey === 'purchasePrice'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-right p-3">
-                    <button type="button" onClick={() => handleSort('pnl')} className="flex items-center justify-end w-full hover:text-gray-900">
-                      평가손익<SortIcon active={sortKey === 'pnl'} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="p-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {sortedAssets.map((asset) => {
-                  const q = quotes[asset.ticker];
-                  const currentPriceKRW = q?.price != null
-                    ? quotePriceToKRW(q.price, asset, rate)
-                    : null;
-                  const purchasePriceKRW = toKRW(asset.purchasePrice, asset.purchaseCurrency, rate);
-                  const pnl = currentPriceKRW != null
-                    ? (currentPriceKRW - purchasePriceKRW) * asset.quantity
-                    : null;
-                  const pnlPct = currentPriceKRW != null
-                    ? ((currentPriceKRW - purchasePriceKRW) / purchasePriceKRW) * 100
-                    : null;
+        {/* 자산 목록 */}
+        <section>
+          <SectionTitle>보유 자산</SectionTitle>
+          {assets.length > 0 ? (
+            <div className="card overflow-x-auto">
+              <table className="w-full min-w-[860px] text-[14px]">
+                <thead className="text-[12px] font-semibold text-gray-500">
+                  <tr className="border-b border-gray-100">
+                    <SortHeader label="종목" sortKey="ticker" activeKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
+                    <SortHeader label="분류" sortKey="category" activeKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
+                    <SortHeader label="현재가" sortKey="currentPrice" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortHeader label="등락" sortKey="changePercent" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortHeader label="수량" sortKey="quantity" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortHeader label="평가금액" sortKey="evalAmount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortHeader label="매수단가" sortKey="purchasePrice" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortHeader label="평가손익" sortKey="pnl" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                    <th className="px-3 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedAssets.map((asset) => {
+                    const q = quotes[asset.ticker];
+                    const currentPriceKRW = q?.price != null
+                      ? quotePriceToKRW(q.price, asset, rate)
+                      : null;
+                    const purchasePriceKRW = toKRW(asset.purchasePrice, asset.purchaseCurrency, rate);
+                    const pnl = currentPriceKRW != null
+                      ? (currentPriceKRW - purchasePriceKRW) * asset.quantity
+                      : null;
+                    const pnlPct = currentPriceKRW != null
+                      ? ((currentPriceKRW - purchasePriceKRW) / purchasePriceKRW) * 100
+                      : null;
 
-                  return (
-                    <tr key={asset.id} className="hover:bg-gray-50">
-                      <td className="p-3">
-                        <p className="font-medium">{q?.shortName ?? asset.ticker}</p>
-                        <p className="text-xs text-gray-400">{asset.ticker}</p>
-                      </td>
-                      <td className="p-3">
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
-                          {asset.category}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        {currentPriceKRW != null
-                          ? currentPriceKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                          : '—'}
-                      </td>
-                      <td className={`p-3 text-right ${q?.change != null && q.change >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {q?.changePercent != null
-                          ? `${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%`
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-right">{asset.quantity.toLocaleString()}</td>
-                      <td className="p-3 text-right font-medium">
-                        {currentPriceKRW != null
-                          ? `${(currentPriceKRW * asset.quantity).toLocaleString(undefined, { maximumFractionDigits: 0 })}원`
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-right">
-                        {asset.purchaseCurrency === 'USD' ? (
-                          <span>
-                            <span className="text-gray-500 text-xs">${asset.purchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                            {exchangeRate > 0 && (
-                              <span className="block text-gray-400 text-xs">
-                                ≈ {purchasePriceKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                    return (
+                      <tr key={asset.id} className="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50">
+                        <td className="px-3 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                              style={{ backgroundColor: CATEGORY_COLORS[asset.category] }}
+                            >
+                              {asset.ticker.slice(0, 2)}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block max-w-[180px] truncate font-semibold text-gray-900">
+                                {q?.shortName ?? asset.ticker}
                               </span>
-                            )}
-                          </span>
-                        ) : (
-                          `${asset.purchasePrice.toLocaleString()}원`
-                        )}
-                      </td>
-                      <td className={`p-3 text-right ${pnl != null && pnl >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {pnl != null
-                          ? `${pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}원 (${pnlPct!.toFixed(2)}%)`
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => setEditingAsset(asset)}
-                          className="text-gray-400 hover:text-blue-500 text-xs px-2 py-1 rounded mr-1"
+                              <span className="block text-[12px] text-gray-400">{asset.ticker}</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <span className="chip bg-gray-100 text-gray-600">{asset.category}</span>
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right text-gray-800">
+                          {currentPriceKRW != null
+                            ? currentPriceKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                            : '—'}
+                        </td>
+                        <td
+                          className={`tnum px-3 py-3.5 text-right font-semibold ${
+                            q?.change != null && q.change >= 0 ? 'text-up' : 'text-down'
+                          }`}
                         >
-                          수정
-                        </button>
-                        <button
-                          onClick={() => handleDelete(asset.id)}
-                          className="text-gray-400 hover:text-red-500 text-xs px-2 py-1 rounded"
+                          {q?.changePercent != null
+                            ? `${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%`
+                            : '—'}
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right text-gray-800">{asset.quantity.toLocaleString()}</td>
+                        <td className="tnum px-3 py-3.5 text-right font-bold text-gray-900">
+                          {currentPriceKRW != null
+                            ? `${(currentPriceKRW * asset.quantity).toLocaleString(undefined, { maximumFractionDigits: 0 })}원`
+                            : '—'}
+                        </td>
+                        <td className="tnum px-3 py-3.5 text-right text-gray-800">
+                          {asset.purchaseCurrency === 'USD' ? (
+                            <span>
+                              <span className="block">
+                                ${asset.purchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              </span>
+                              {exchangeRate > 0 && (
+                                <span className="block text-[12px] text-gray-400">
+                                  ≈ {purchasePriceKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            `${asset.purchasePrice.toLocaleString()}원`
+                          )}
+                        </td>
+                        <td
+                          className={`tnum px-3 py-3.5 text-right font-semibold ${
+                            pnl != null && pnl >= 0 ? 'text-up' : 'text-down'
+                          }`}
                         >
-                          삭제
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <p className="text-gray-400 text-sm text-center py-8">등록된 자산이 없습니다.</p>
-      )}
+                          {pnl != null ? (
+                            <>
+                              <span className="block">
+                                {pnl >= 0 ? '+' : ''}
+                                {pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                              </span>
+                              <span className="block text-[12px] font-medium opacity-80">
+                                {pnlPct! >= 0 ? '+' : ''}
+                                {pnlPct!.toFixed(2)}%
+                              </span>
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 text-right">
+                          <button
+                            onClick={() => setEditingAsset(asset)}
+                            className="rounded-lg px-2 py-1 text-[12px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            수정
+                          </button>
+                          <button
+                            onClick={() => handleDelete(asset.id)}
+                            className="ml-0.5 rounded-lg px-2 py-1 text-[12px] font-semibold text-gray-400 transition-colors hover:bg-up-soft hover:text-up"
+                          >
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="card flex flex-col items-center px-6 py-14 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-[20px]">💼</span>
+              <p className="mt-4 text-[15px] font-semibold text-gray-900">아직 등록한 자산이 없어요</p>
+              <p className="mt-1 text-[13px] text-gray-500">아래에서 첫 종목을 추가해 보세요.</p>
+            </div>
+          )}
+        </section>
 
-      {/* 자산 등록 폼 */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">자산 등록</h2>
-        <form onSubmit={handleAdd} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">종목 코드</label>
-              <TickerInput
-                value={search.ticker}
-                onChange={search.setTicker}
-                suggestions={search.suggestions}
-                showDropdown={search.showDropdown}
-                activeIndex={search.activeIndex}
-                isSearching={search.isSearching}
-                wrapperRef={search.wrapperRef}
-                onKeyDown={(e) => search.handleKeyDown(e)}
-                onSelect={(item) => search.selectSuggestion(item)}
-                onFocus={() => search.suggestions.length > 0 && undefined}
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">자산 분류</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as AssetCategory)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">수량</label>
-              <input
-                type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="예: 0.001"
-                min="0"
-                step="any"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm text-gray-600">매수 단가</label>
-                <CurrencyToggle value={purchaseCurrency} onChange={setPurchaseCurrency} />
+        {/* 자산 등록 폼 */}
+        <section>
+          <SectionTitle>자산 등록</SectionTitle>
+          <div className="card p-6">
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">종목 코드</label>
+                  <TickerInput
+                    value={search.ticker}
+                    onChange={search.setTicker}
+                    suggestions={search.suggestions}
+                    showDropdown={search.showDropdown}
+                    activeIndex={search.activeIndex}
+                    isSearching={search.isSearching}
+                    wrapperRef={search.wrapperRef}
+                    onKeyDown={(e) => search.handleKeyDown(e)}
+                    onSelect={(item) => search.selectSuggestion(item)}
+                    onFocus={() => search.suggestions.length > 0 && undefined}
+                  />
+                </div>
+                <div>
+                  <label className="label">자산 분류</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as AssetCategory)}
+                    className="field field-select"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              {purchaseCurrency === 'USD' ? (
-                <USDInput
-                  value={purchasePrice}
-                  onChange={setPurchasePrice}
-                  placeholder="예: 185.50"
-                />
-              ) : (
-                <input
-                  type="number"
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                  placeholder="예: 28000"
-                  min="0"
-                  step="any"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">수량</label>
+                  <input
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="예: 0.001"
+                    min="0"
+                    step="any"
+                    className="field tnum"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="label mb-0">매수 단가</label>
+                    <CurrencyToggle value={purchaseCurrency} onChange={setPurchaseCurrency} />
+                  </div>
+                  {purchaseCurrency === 'USD' ? (
+                    <USDInput
+                      value={purchasePrice}
+                      onChange={setPurchasePrice}
+                      placeholder="예: 185.50"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      value={purchasePrice}
+                      onChange={(e) => setPurchasePrice(e.target.value)}
+                      placeholder="예: 28000"
+                      min="0"
+                      step="any"
+                      className="field tnum"
+                    />
+                  )}
+                </div>
+              </div>
+              {error && <p className="text-[13px] font-medium text-up">{error}</p>}
+              <button type="submit" disabled={isPending} className="btn btn-primary btn-lg w-full">
+                {isPending ? '등록 중...' : '자산 등록하기'}
+              </button>
+            </form>
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {isPending ? '등록 중...' : '자산 등록'}
-          </button>
-        </form>
-      </div>
-    </div>
+        </section>
+      </main>
+    </>
   );
 }

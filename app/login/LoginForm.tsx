@@ -40,18 +40,23 @@ export default function LoginForm({ next }: { next?: string }) {
 
   if (status === 'sent') {
     return (
-      <div className="space-y-3 text-center">
-        <p className="text-4xl">📮</p>
-        <h2 className="text-lg font-semibold">메일함을 확인해주세요</h2>
-        <p className="text-sm text-gray-500">
-          <span className="font-medium text-gray-700">{email.trim()}</span> 으로 로그인 링크를 보냈습니다.
+      <div className="text-center">
+        <div className="mx-auto w-16 h-16 rounded-full bg-brand-soft flex items-center justify-center">
+          <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" aria-hidden="true">
+            <rect x="3" y="5.5" width="18" height="13" rx="3" stroke="#3182f6" strokeWidth="2" />
+            <path d="M4.5 8l6.4 4.6a2 2 0 002.2 0L19.5 8" stroke="#3182f6" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
+        <h2 className="mt-5 text-[22px] font-bold text-gray-900">메일함을 확인해주세요</h2>
+        <p className="mt-3 text-[15px] leading-relaxed text-gray-600">
+          <span className="font-semibold text-gray-900">{email.trim()}</span> 으로
           <br />
-          링크를 클릭하면 바로 로그인됩니다.
+          로그인 링크를 보냈어요. 링크를 누르면 바로 시작해요.
         </p>
         <button
           type="button"
           onClick={() => setStatus('idle')}
-          className="text-sm text-blue-600 hover:underline"
+          className="btn btn-secondary btn-md mt-7 w-full"
         >
           다른 이메일로 다시 보내기
         </button>
@@ -62,7 +67,7 @@ export default function LoginForm({ next }: { next?: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="email" className="block text-sm text-gray-600 mb-1">
+        <label htmlFor="email" className="label">
           이메일
         </label>
         <input
@@ -72,19 +77,18 @@ export default function LoginForm({ next }: { next?: string }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           autoComplete="email"
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="field text-[16px]"
         />
       </div>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
-      <button
-        type="submit"
-        disabled={status === 'sending'}
-        className="w-full bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
+
+      {error && <p className="text-[13px] font-medium text-up">{error}</p>}
+
+      <button type="submit" disabled={status === 'sending'} className="btn btn-primary btn-lg w-full">
         {status === 'sending' ? '전송 중...' : '로그인 링크 받기'}
       </button>
-      <p className="text-xs text-gray-400 text-center">
-        비밀번호는 필요 없습니다. 메일로 받은 링크를 클릭하면 로그인됩니다.
+
+      <p className="pt-1 text-center text-[13px] text-gray-500">
+        비밀번호는 필요 없어요. 메일로 받은 링크만 누르면 돼요.
       </p>
     </form>
   );

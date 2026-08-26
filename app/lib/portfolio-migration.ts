@@ -4,6 +4,7 @@ import {
   type AssetCategory,
   type Currency,
   CATEGORIES,
+  hasAllocations,
   isAssetCategory,
 } from '@/app/lib/portfolio';
 import { saveAllocations, upsertAssets } from '@/app/lib/portfolio-db';
@@ -46,8 +47,7 @@ function readLegacyAllocations(): Allocations | null {
       CATEGORIES.map((c) => [c, Number(parsed[c]) || 0]),
     ) as Allocations;
 
-    const hasValue = CATEGORIES.some((c) => allocations[c] > 0);
-    return hasValue ? allocations : null;
+    return hasAllocations(allocations) ? allocations : null;
   } catch {
     return null;
   }
@@ -82,8 +82,7 @@ export async function migrateLegacyData(
 
   const legacyAllocations = readLegacyAllocations();
   if (legacyAllocations) {
-    const serverHasAllocations = CATEGORIES.some((c) => serverAllocations[c] > 0);
-    if (!serverHasAllocations) {
+    if (!hasAllocations(serverAllocations)) {
       await saveAllocations(legacyAllocations, userId);
       result.allocations = legacyAllocations;
     }

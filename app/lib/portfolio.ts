@@ -28,6 +28,26 @@ export function emptyAllocations(): Allocations {
   return Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Allocations;
 }
 
+/** 저장된 목표 비중이 없을 때 처음 보여줄 기본 배분 */
+const DEFAULT_TARGET_PCT: Partial<Record<AssetCategory, number>> = {
+  '미국주식': 35.2,
+  '국내주식': 29.4,
+  '국내채권': 15.7,
+  '금': 13.8,
+  '미국채권': 5.8,
+};
+
+export function defaultAllocations(): Allocations {
+  return Object.fromEntries(
+    CATEGORIES.map((c) => [c, DEFAULT_TARGET_PCT[c] ?? 0]),
+  ) as Allocations;
+}
+
+/** 목표 비중이 하나라도 설정돼 있는지 */
+export function hasAllocations(allocations: Allocations): boolean {
+  return CATEGORIES.some((c) => (allocations[c] ?? 0) > 0);
+}
+
 export function isAssetCategory(value: unknown): value is AssetCategory {
   return typeof value === 'string' && (CATEGORIES as string[]).includes(value);
 }
