@@ -1,30 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
-
-type AssetCategory = '미국주식' | '미국채권' | '국내주식' | '국내채권' | '금' | '암호화폐' | '기타';
-type Currency = 'KRW' | 'USD';
-
-const CATEGORIES: AssetCategory[] = ['미국주식', '미국채권', '국내주식', '국내채권', '금', '암호화폐', '기타'];
-
-const CATEGORY_COLORS: Record<AssetCategory, string> = {
-  '미국주식': '#3B82F6',
-  '미국채권': '#10B981',
-  '국내주식': '#F59E0B',
-  '국내채권': '#8B5CF6',
-  '금': '#F97316',
-  '암호화폐': '#F7931A',
-  '기타': '#6B7280',
-};
-
-interface Asset {
-  id: string;
-  ticker: string;
-  quantity: number;
-  purchasePrice: number; // 저장 통화: purchaseCurrency 기준
-  category: AssetCategory;
-  purchaseCurrency: Currency;
-}
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { signOut } from '@/app/auth/actions';
+import {
+  type Allocations,
+  type Asset,
+  type AssetCategory,
+  type Currency,
+  CATEGORIES,
+  CATEGORY_COLORS,
+  emptyAllocations,
+} from '@/app/lib/portfolio';
+import {
+  deleteAsset as deleteAssetRow,
+  fetchAllocations,
+  fetchAssets,
+  saveAllocations,
+  upsertAsset,
+} from '@/app/lib/portfolio-db';
+import { migrateLegacyData } from '@/app/lib/portfolio-migration';
 
 interface Quote {
   ticker: string;
@@ -40,43 +34,18 @@ interface SearchResult {
   typeDisp: string;
 }
 
-const STORAGE_KEY = 'portfolio_assets';
-const ALLOCATION_STORAGE_KEY = 'portfolio_allocations';
-
-function loadAllocations(): Record<AssetCategory, number> {
-  try {
-    const raw = localStorage.getItem(ALLOCATION_STORAGE_KEY);
-    if (!raw) return Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>;
-    const parsed = JSON.parse(raw);
-    // 누락된 카테고리는 0으로 채움
-    return Object.fromEntries(CATEGORIES.map((c) => [c, parsed[c] ?? 0])) as Record<AssetCategory, number>;
-  } catch {
-    return Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>;
+/**
+ * 에러를 화면에 띄울 문구로 변환.
+ * Supabase의 PostgrestError는 Error 인스턴스가 아니라 `{ message, ... }` 객체다.
+ */
+function toMessage(e: unknown, fallback: string): string {
+  let detail = '';
+  if (typeof e === 'string') {
+    detail = e;
+  } else if (e && typeof e === 'object' && typeof (e as { message?: unknown }).message === 'string') {
+    detail = (e as { message: string }).message;
   }
-}
-
-function saveAllocations(allocs: Record<AssetCategory, number>) {
-  localStorage.setItem(ALLOCATION_STORAGE_KEY, JSON.stringify(allocs));
-}
-
-function loadAssets(): Asset[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    // 기존 데이터 하위 호환: category, purchaseCurrency 없으면 기본값 적용
-    return parsed.map((a: Record<string, unknown>) => ({
-      category: '기타' as AssetCategory,
-      purchaseCurrency: 'KRW' as Currency,
-      ...a,
-    })) as Asset[];
-  } catch {
-    return [];
-  }
-}
-
-function saveAssets(assets: Asset[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(assets));
+  return detail ? `${fallback} (${detail})` : fallback;
 }
 
 /** 원화로 변환 */
@@ -541,8 +510,8 @@ function AllocationTable({
   assets: Asset[];
   quotes: Record<string, Quote>;
   exchangeRate: number;
-  targetAllocations: Record<AssetCategory, number>;
-  onChangeTargetAllocations: (allocs: Record<AssetCategory, number>) => void;
+  targetAllocations: Allocations;
+  onChangeTargetAllocations: (allocs: Allocations) => void;
 }) {
   const categoryTotals = CATEGORIES.reduce<Record<AssetCategory, number>>((acc, cat) => {
     acc[cat] = assets
@@ -563,9 +532,7 @@ function AllocationTable({
 
   function handleChange(cat: AssetCategory, val: string) {
     const num = Math.max(0, Math.min(100, Number(val) || 0));
-    const updated = { ...targetAllocations, [cat]: num };
-    onChangeTargetAllocations(updated);
-    saveAllocations(updated);
+    onChangeTargetAllocations({ ...targetAllocations, [cat]: num });
   }
 
   return (
@@ -667,7 +634,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
-export default function AssetManager() {
+export default function AssetManager({ userId, userEmail }: { userId: string; userEmail: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [category, setCategory] = useState<AssetCategory>('미국주식');
@@ -675,22 +642,72 @@ export default function AssetManager() {
   const [quantity, setQuantity] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [error, setError] = useState('');
+  const [syncError, setSyncError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number>(0);
   const [sortKey, setSortKey] = useState<SortKey>('category');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [targetAllocations, setTargetAllocations] = useState<Record<AssetCategory, number>>(
-    Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<AssetCategory, number>
-  );
+  const [targetAllocations, setTargetAllocations] = useState<Allocations>(emptyAllocations);
 
   const search = useTickerSearch();
+  const allocationSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 최초 로드: Supabase에서 읽고, 남아있는 localStorage 데이터가 있으면 한 번 옮긴다.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [serverAssets, serverAllocations] = await Promise.all([
+          fetchAssets(),
+          fetchAllocations(),
+        ]);
+        if (cancelled) return;
+
+        const migrated = await migrateLegacyData(userId, serverAssets, serverAllocations);
+        if (cancelled) return;
+
+        setAssets(migrated.assets ?? serverAssets);
+        setTargetAllocations(migrated.allocations ?? serverAllocations);
+      } catch (e) {
+        if (!cancelled) setSyncError(toMessage(e, '데이터를 불러오지 못했습니다.'));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    fetchExchangeRate();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // 목표 비중은 입력할 때마다 저장하면 요청이 과해지므로 잠깐 모았다가 저장한다.
+  const scheduleAllocationSave = useCallback(
+    (next: Allocations) => {
+      if (allocationSaveTimerRef.current) clearTimeout(allocationSaveTimerRef.current);
+      allocationSaveTimerRef.current = setTimeout(() => {
+        saveAllocations(next, userId).catch((e) =>
+          setSyncError(toMessage(e, '목표 비중을 저장하지 못했습니다.')),
+        );
+      }, 600);
+    },
+    [userId],
+  );
 
   useEffect(() => {
-    setAssets(loadAssets());
-    setTargetAllocations(loadAllocations());
-    fetchExchangeRate();
+    return () => {
+      if (allocationSaveTimerRef.current) clearTimeout(allocationSaveTimerRef.current);
+    };
   }, []);
+
+  function handleAllocationsChange(next: Allocations) {
+    setSyncError('');
+    setTargetAllocations(next);
+    scheduleAllocationSave(next);
+  }
 
   useEffect(() => {
     if (assets.length === 0) return;
@@ -742,18 +759,24 @@ export default function AssetManager() {
       return;
     }
 
-    startTransition(() => {
-      const newAsset: Asset = {
-        id: crypto.randomUUID(),
-        ticker: search.ticker.trim().toUpperCase(),
-        category,
-        quantity: qty,
-        purchasePrice: price,
-        purchaseCurrency,
-      };
-      const updated = [...assets, newAsset];
-      setAssets(updated);
-      saveAssets(updated);
+    const newAsset: Asset = {
+      id: crypto.randomUUID(),
+      ticker: search.ticker.trim().toUpperCase(),
+      category,
+      quantity: qty,
+      purchasePrice: price,
+      purchaseCurrency,
+    };
+
+    startTransition(async () => {
+      try {
+        await upsertAsset(newAsset, userId);
+      } catch (err) {
+        setError(toMessage(err, '자산을 저장하지 못했습니다.'));
+        return;
+      }
+      setSyncError('');
+      setAssets((prev) => [...prev, newAsset]);
       fetchQuote(newAsset.ticker);
       search.reset();
       setQuantity('');
@@ -762,20 +785,32 @@ export default function AssetManager() {
     });
   }
 
-  function handleDelete(id: string) {
-    const updated = assets.filter((a) => a.id !== id);
-    setAssets(updated);
-    saveAssets(updated);
+  async function handleDelete(id: string) {
+    const previous = assets;
+    setSyncError('');
+    setAssets((prev) => prev.filter((a) => a.id !== id));
+    try {
+      await deleteAssetRow(id);
+    } catch (err) {
+      setAssets(previous);
+      setSyncError(toMessage(err, '자산을 삭제하지 못했습니다.'));
+    }
   }
 
-  function handleEditSave(updated: Asset) {
-    const newAssets = assets.map((a) => (a.id === updated.id ? updated : a));
-    setAssets(newAssets);
-    saveAssets(newAssets);
-    if (updated.ticker !== editingAsset?.ticker) {
-      fetchQuote(updated.ticker);
-    }
+  async function handleEditSave(updated: Asset) {
+    const previous = assets;
+    const previousTicker = editingAsset?.ticker;
+    setSyncError('');
+    setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     setEditingAsset(null);
+
+    try {
+      await upsertAsset(updated, userId);
+      if (updated.ticker !== previousTicker) fetchQuote(updated.ticker);
+    } catch (err) {
+      setAssets(previous);
+      setSyncError(toMessage(err, '자산을 수정하지 못했습니다.'));
+    }
   }
 
   function handleSort(key: SortKey) {
@@ -867,16 +902,40 @@ export default function AssetManager() {
     return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
   });
 
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <p className="text-gray-400 text-sm text-center py-16">불러오는 중...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <h1 className="text-2xl font-bold">내 포트폴리오</h1>
-        {exchangeRate > 0 && (
-          <span className="text-xs text-gray-400">
-            환율 {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원/$
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span className="truncate max-w-[180px]">{userEmail}</span>
+            <form action={signOut}>
+              <button type="submit" className="hover:text-gray-700 underline underline-offset-2">
+                로그아웃
+              </button>
+            </form>
+          </div>
+          {exchangeRate > 0 && (
+            <span className="text-xs text-gray-400">
+              환율 {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원/$
+            </span>
+          )}
+        </div>
       </div>
+
+      {syncError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+          {syncError}
+        </div>
+      )}
 
       {editingAsset && (
         <EditModal
@@ -916,7 +975,7 @@ export default function AssetManager() {
         quotes={quotes}
         exchangeRate={rate}
         targetAllocations={targetAllocations}
-        onChangeTargetAllocations={setTargetAllocations}
+        onChangeTargetAllocations={handleAllocationsChange}
       />
 
       {/* 자산 목록 */}
