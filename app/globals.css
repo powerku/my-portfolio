@@ -264,6 +264,15 @@ html[data-theme="dark"] {
     background: var(--color-gray-200);
   }
 
+  /* 좁은 화면에서 가로로 밀어 보는 줄. 스크롤바가 줄 높이를 바꾸지 않게 감춘다. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .chip {
     display: inline-flex;
     align-items: center;

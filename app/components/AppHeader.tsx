@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { signOut } from '@/app/auth/actions';
 import { type SessionUser } from '@/app/lib/portfolio-store';
@@ -31,9 +32,21 @@ export default function AppHeader({
   exchangeRate: number;
   active: AppTab;
 }) {
+  const navRef = useRef<HTMLElement>(null);
+
+  // 탭 줄이 다 안 들어가 가로로 밀린 좁은 화면에서, 지금 보고 있는 화면의 탭은 보이게 둔다.
+  useEffect(() => {
+    const nav = navRef.current;
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !current) return;
+    // scrollIntoView는 페이지까지 움직여서, 탭 줄만 직접 민다.
+    nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.clientWidth) / 2;
+  }, [active]);
+
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-surface/80 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-5 py-3.5">
+      {/* 한 줄로 고정한다. 자리가 모자라면 줄바꿈 대신 탭 줄만 가로로 밀린다. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-nowrap items-center gap-2 px-4 py-3.5 sm:gap-3 sm:px-5">
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-brand">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -45,13 +58,13 @@ export default function AppHeader({
           <span className="hidden text-[17px] font-bold text-gray-900 sm:block">내 포트폴리오</span>
         </Link>
 
-        <nav className="flex gap-0.5 rounded-[10px] bg-gray-100 p-0.5 text-[13px] font-semibold">
+        <nav ref={navRef} className="no-scrollbar flex min-w-0 gap-0.5 overflow-x-auto rounded-[10px] bg-gray-100 p-0.5 text-[13px] font-semibold">
           {TABS.map((tab) => (
             <Link
               key={tab.href}
               href={tab.href}
               aria-current={active === tab.href ? 'page' : undefined}
-              className={`rounded-lg px-3 py-1.5 transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 transition-colors sm:px-3 ${
                 active === tab.href
                   ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
                   : 'text-gray-500 hover:text-gray-700'
@@ -62,7 +75,7 @@ export default function AppHeader({
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
           <ThemeToggle />
           {exchangeRate > 0 && (
             <span className="tnum chip hidden bg-gray-100 text-gray-600 sm:inline-flex">
