@@ -22,12 +22,16 @@ export interface DividendInfo {
   nextExDate: string | null;
   /** 다음 배당락일이 주기로 추정한 값인지. Yahoo가 확정 일자를 주면 false */
   nextExDateEstimated: boolean;
-  /** 다음 배당 지급일 (YYYY-MM-DD). Yahoo가 확정 일정을 줄 때만 채워진다. */
+  /** 다음 배당 지급일 (YYYY-MM-DD). 다음 배당락일을 모르면 null */
   nextPayDate: string | null;
+  /** 다음 배당 지급일이 배당락일~지급일 간격으로 추정한 값인지 */
+  nextPayDateEstimated: boolean;
   /** 최근 1년 배당 지급 횟수. 0이면 배당 이력이 없다. */
   paymentsPerYear: number;
-  /** 1~12월 주당 배당금 (최근 1년 실적을 달마다 모은 값, 길이 12) */
+  /** 1~12월 주당 배당금 (최근 1년 실적을 배당 지급일이 속한 달로 모은 값, 길이 12) */
   monthlyPerShare: number[];
+  /** 1~12월 배당 지급일 (YYYY-MM-DD, 길이 12). 그 달에 배당이 없으면 null이고, 모두 어림값이다. */
+  monthlyPayDate: (string | null)[];
 }
 
 /**

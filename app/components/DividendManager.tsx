@@ -139,24 +139,23 @@ function PerShare({ info }: { info: DividendInfo | undefined }) {
 }
 
 /**
- * 다음 배당락일.
+ * 다음 배당락일과 그 배당의 지급일.
  *
- * 확정 일정이면 배당금이 실제로 들어오는 지급일을 함께 보여주고, 확정 일자가 없으면
- * 배당 주기로 추정한 값임을 알린다.
+ * 배당락일만 알려주면 정작 언제 돈이 들어오는지 알 수 없어 지급일을 함께 보여준다.
+ * 추정한 날짜에는 '예상'을 붙여 확정 일정과 구분한다.
  */
 function NextExDate({ info }: { info: DividendInfo | undefined }) {
   if (!info?.nextExDate) return <span className="text-gray-300">—</span>;
   return (
     <>
-      <span className="block">{formatExDate(info.nextExDate, { withYear: true })}</span>
-      {info.nextExDateEstimated ? (
-        <span className="block text-[12px] font-normal text-gray-400">예상</span>
-      ) : (
-        info.nextPayDate && (
-          <span className="block text-[12px] font-normal text-gray-400">
-            {formatExDate(info.nextPayDate)} 지급
-          </span>
-        )
+      <span className="block">
+        {formatExDate(info.nextExDate, { withYear: true })}
+        {info.nextExDateEstimated && <span className="font-normal text-gray-400"> (예상)</span>}
+      </span>
+      {info.nextPayDate && (
+        <span className="block text-[12px] font-normal text-gray-400">
+          {formatExDate(info.nextPayDate)} 지급{info.nextPayDateEstimated && ' (예상)'}
+        </span>
       )}
     </>
   );
@@ -175,7 +174,7 @@ function AnnualAmount({ annualKRW }: { annualKRW: number | null }) {
   );
 }
 
-/** 입금일이 이만큼 안에 남았으면 곧 들어오는 배당으로 강조한다. */
+/** 배당 지급일이 이만큼 안에 남았으면 곧 들어오는 배당으로 강조한다. */
 const IMMINENT_DAYS = 7;
 
 /** 접어둔 상태에서 보여줄 일정 수 */
@@ -189,11 +188,13 @@ interface UpcomingDividend {
   exDate: string;
   /** 배당락일이 배당 주기로 추정한 값인지 */
   estimated: boolean;
-  /** 배당금이 들어오는 날 (YYYY-MM-DD). 확정 일정이 없으면 null */
+  /** 배당 지급일 (YYYY-MM-DD). 다음 배당락일을 모르면 null */
   payDate: string | null;
+  /** 배당 지급일이 배당락일~지급일 간격으로 추정한 값인지 */
+  payEstimated: boolean;
   /** 이번 한 번의 배당으로 받을 금액(원). 환산할 수 없으면 null */
   amountKRW: number | null;
-  /** D-데이가 가리키는 날 (YYYY-MM-DD). 입금일을 알면 입금일, 모르면 배당락일 */
+  /** D-데이가 가리키는 날 (YYYY-MM-DD). 지급일을 알면 지급일, 모르면 배당락일 */
   countdownDate: string;
   /** D-데이까지 남은 날수 */
   days: number;
@@ -232,6 +233,7 @@ function upcomingDividends(rows: DividendRow[], exchangeRate: number, today: str
       exDate: info.nextExDate,
       estimated: info.nextExDateEstimated,
       payDate: info.nextPayDate,
+      payEstimated: info.nextPayDateEstimated,
       amountKRW: amount,
       countdownDate,
       days: daysUntil(countdownDate, today),
@@ -245,12 +247,12 @@ function upcomingDividends(rows: DividendRow[], exchangeRate: number, today: str
 }
 
 /**
- * 남은 날수 배지. 입금이 가까운 종목만 눈에 띄게 한다.
+ * 남은 날수 배지. 지급일이 가까운 종목만 눈에 띄게 한다.
  *
  * 배당 정보는 몇 시간 동안 재사용하므로 확정 일정이 그새 지나갈 수 있다.
  * 이미 지난 날짜는 강조하지 않는다.
  *
- * 같은 D-3이라도 입금일까지인지 배당락일까지인지에 따라 뜻이 달라, 무엇까지 남은
+ * 같은 D-3이라도 지급일까지인지 배당락일까지인지에 따라 뜻이 달라, 무엇까지 남은
  * 날수인지 읽어주는 이름을 붙인다.
  */
 function DDayChip({ days, basis }: { days: number; basis: string }) {
@@ -263,25 +265,32 @@ function DDayChip({ days, basis }: { days: number; basis: string }) {
   );
 }
 
-/** 다가오는 배당 한 줄. D-데이는 입금일까지, 배당락일은 언제까지 사야 하는지로 읽는다. */
+/** 다가오는 배당 한 줄. D-데이는 배당 지급일까지, 배당락일은 언제까지 사야 하는지로 읽는다. */
 function UpcomingRow({ item, currentYear }: { item: UpcomingDividend; currentYear: string }) {
   /** 해가 바뀐 뒤의 날짜는 연도를 붙여야 몇 월인지 헷갈리지 않는다. */
   const withYear = (dateKey: string) => ({ withYear: dateKey.slice(0, 4) !== currentYear });
 
+  /** 지급일·배당락일이 모두 추정이면 날짜마다 '(예상)'을 붙이지 않고 한 번만 붙인다. */
+  const bothEstimated = item.estimated && item.payEstimated;
+
   return (
     <li className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5 last:border-b-0">
-      <DDayChip days={item.days} basis={item.payDate ? '입금' : '배당락'} />
+      <DDayChip days={item.days} basis={item.payDate ? '배당 지급' : '배당락'} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-bold text-gray-900">{item.name}</p>
+        {/* D-데이가 센 지급일을 먼저 두고, 언제까지 사야 하는지인 배당락일을 뒤에 붙인다. */}
         <p className="mt-0.5 truncate text-[12px] text-gray-500">
-          {formatExDate(item.exDate, withYear(item.exDate))} 배당락
-          {item.estimated && <span className="text-gray-400"> (예상)</span>}
           {item.payDate && (
             <>
+              {formatExDate(item.payDate, withYear(item.payDate))} 지급
+              {item.payEstimated && !bothEstimated && <span className="text-gray-400"> (예상)</span>}
               <span aria-hidden="true" className="text-gray-300"> · </span>
-              {formatExDate(item.payDate, withYear(item.payDate))} 입금
             </>
           )}
+          {formatExDate(item.exDate, withYear(item.exDate))} 배당락
+          {item.estimated && !bothEstimated && <span className="text-gray-400"> (예상)</span>}
+          {/* 둘 다 추정이면 '(예상)'을 두 번 붙이지 않고 줄 끝에 한 번만 둔다. */}
+          {bothEstimated && <span className="text-gray-400"> (예상)</span>}
         </p>
       </div>
       <p className="tnum shrink-0 text-[14px] font-bold text-gray-900">
@@ -308,7 +317,7 @@ function UpcomingDividends({ items, today }: { items: UpcomingDividend[]; today:
   return (
     <section>
       <SectionTitle
-        action={<span className="text-[12px] text-gray-400">D-데이는 입금일 기준이에요</span>}
+        action={<span className="text-[12px] text-gray-400">D-데이는 배당 지급일 기준이에요</span>}
       >
         다가오는 배당
       </SectionTitle>
@@ -332,16 +341,30 @@ function UpcomingDividends({ items, today }: { items: UpcomingDividend[]; today:
   );
 }
 
-/** 한 달에 들어올 배당을 종목별로 쪼갠 목록. 같은 티커를 여러 번 담았으면 합쳐서 한 줄로 본다. */
+/**
+ * 그 달에 들어올 배당을 종목별로 쪼갠 목록. 같은 티커를 여러 번 담았으면 합쳐서 한 줄로 본다.
+ *
+ * 달을 나누는 기준은 배당 지급일이라 막대 하나가 곧 그 달에 들어오는 돈이지만, 정확한
+ * 날짜는 종목마다 달라 종목별로 봐야 알 수 있다.
+ */
 function monthlyBreakdown(rows: DividendRow[], month: number) {
-  const byTicker = new Map<string, { ticker: string; name: string; amount: number }>();
+  const byTicker = new Map<
+    string,
+    { ticker: string; name: string; amount: number; payDate: string | null }
+  >();
 
   for (const row of rows) {
     const amount = row.monthlyKRW[month - 1];
     if (amount <= 0) continue;
     const found = byTicker.get(row.asset.ticker);
     if (found) found.amount += amount;
-    else byTicker.set(row.asset.ticker, { ticker: row.asset.ticker, name: row.name, amount });
+    else
+      byTicker.set(row.asset.ticker, {
+        ticker: row.asset.ticker,
+        name: row.name,
+        amount,
+        payDate: row.info?.monthlyPayDate?.[month - 1] ?? null,
+      });
   }
 
   return [...byTicker.values()].sort((a, b) => b.amount - a.amount);
@@ -378,7 +401,15 @@ function MonthlyTooltip({ month, rows }: { month: number; rows: DividendRow[] })
         <ul className="mt-2 space-y-1 border-t border-inverse-fg/15 pt-2">
           {items.map((item) => (
             <li key={item.ticker} className="flex items-baseline justify-between gap-3 text-[12px]">
-              <span className="min-w-0 truncate text-inverse-fg/80">{item.name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-inverse-fg/80">{item.name}</span>
+                {/* 배당 이력에는 지급일이 없어 모두 어림한 날짜라, 줄마다 '예상'을 붙인다. */}
+                {item.payDate && (
+                  <span className="mt-0.5 block text-[11px] text-inverse-fg/50">
+                    {formatExDate(item.payDate)} 지급 예상
+                  </span>
+                )}
+              </span>
               <span className="tnum shrink-0 font-semibold text-inverse-fg">
                 {formatKRW(Math.round(item.amount))}원
               </span>
@@ -390,7 +421,7 @@ function MonthlyTooltip({ month, rows }: { month: number; rows: DividendRow[] })
   );
 }
 
-/** 최근 1년 실적을 달마다 모아 보여주는 막대그래프 */
+/** 최근 1년 실적을 배당 지급일이 속한 달로 모아 보여주는 막대그래프 */
 function MonthlyChart({
   rows,
   monthlyKRW,
@@ -411,7 +442,9 @@ function MonthlyChart({
 
   return (
     <section>
-      <SectionTitle>월별 배당</SectionTitle>
+      <SectionTitle action={<span className="text-[12px] text-gray-400">배당 지급일 기준이에요</span>}>
+        월별 배당
+      </SectionTitle>
       <div className="card px-4 py-6 sm:px-6">
         <div className="relative" onPointerLeave={() => setActiveMonth(null)}>
           <div className="flex items-end gap-1 sm:gap-2">
@@ -465,7 +498,7 @@ function MonthlyChart({
             <div
               role="tooltip"
               // 막대를 가리지 않도록 그래프 위쪽에 띄우고, 클릭은 막대로 그대로 가게 둔다.
-              className="pointer-events-none absolute bottom-full z-10 mb-2 w-44"
+              className="pointer-events-none absolute bottom-full z-10 mb-2 w-52"
               style={tooltipPosition(activeMonth)}
             >
               <MonthlyTooltip month={activeMonth} rows={rows} />
@@ -671,19 +704,6 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
                 <p className="tnum mt-2 text-[15px] font-semibold text-gray-500">
                   월 평균 {formatKRW(annualTotal / 12)}원
                 </p>
-                {/* 가장 가까운 배당은 스크롤하지 않고도 보이도록 요약에 함께 둔다. */}
-                {upcoming[0] && (
-                  <p className="mt-3.5 inline-flex flex-wrap items-center gap-x-1.5 rounded-full bg-brand-soft px-3 py-1.5 text-[13px] font-semibold text-brand">
-                    {/* 날짜와 D-데이는 같은 날을 가리켜야 하므로, 무엇의 날짜인지도 함께 밝힌다. */}
-                    <span>{upcoming[0].payDate ? '가장 가까운 입금' : '가장 가까운 배당락'}</span>
-                    <span aria-hidden="true" className="text-brand/40">·</span>
-                    <span className="tnum">
-                      {formatExDate(upcoming[0].countdownDate)} {dDayLabel(upcoming[0].days)}
-                    </span>
-                    <span aria-hidden="true" className="text-brand/40">·</span>
-                    <span className="max-w-[10rem] truncate">{upcoming[0].name}</span>
-                  </p>
-                )}
               </div>
               <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100">
                 <div className="px-4 py-4 sm:px-6">
