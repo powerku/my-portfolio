@@ -1,11 +1,34 @@
 import type { Metadata, Viewport } from "next";
+import { SITE_URL } from "./lib/site";
 import { THEME_COLORS, THEME_INIT_SCRIPT } from "./lib/theme";
 import "./globals.css";
 
+const DESCRIPTION =
+  "보유 종목의 현재가·평가금액·수익률과 목표 비중, 배당을 한눈에 관리하는 무료 포트폴리오 앱. 로그인 없이 바로 쓸 수 있어요.";
+
 export const metadata: Metadata = {
-  title: "곳간",
-  description: "내 자산을 한눈에 관리하는 포트폴리오",
+  // 상대 경로로 적은 canonical·og:image를 절대 URL로 펴는 기준. 없으면 색인이 어긋난다.
+  metadataBase: new URL(SITE_URL),
+  title: "곳간 — 내 자산 포트폴리오",
+  description: DESCRIPTION,
   applicationName: "곳간",
+  keywords: ["포트폴리오", "자산관리", "배당", "자산 비중", "리밸런싱", "주식 수익률"],
+  // 하위 화면은 각자 canonical을 덮어쓴다. (app/*/page.tsx)
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "곳간",
+    locale: "ko_KR",
+    url: "/",
+    title: "곳간 — 내 자산 포트폴리오",
+    description: DESCRIPTION,
+  },
+  /*
+   * Search Console에서 "HTML 태그" 방식으로 소유를 확인할 때 쓴다.
+   * 대시보드가 준 content 값을 GOOGLE_SITE_VERIFICATION 환경 변수에 넣으면 meta가 붙는다.
+   * (도메인을 직접 소유했다면 DNS 확인이 더 편하고, 그 경우 이 변수는 비워도 된다)
+   */
+  verification: { google: process.env.GOOGLE_SITE_VERIFICATION },
   // 매니페스트(app/manifest.ts) 링크는 Next가 알아서 넣는다. 여기는 iOS 몫이다.
   appleWebApp: {
     capable: true,

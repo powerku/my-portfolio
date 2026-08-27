@@ -7,6 +7,7 @@ import { CATEGORIES } from '@/app/lib/portfolio';
 export const metadata = {
   title: '소개 · 곳간',
   description: '어떤 앱인지, 데이터는 어디에 저장되는지, 시세는 어디서 오는지',
+  alternates: { canonical: '/about' },
 };
 
 /** 화면별로 뭘 하는 곳인지. 카드 순서는 상단 탭 순서와 같게 둔다. */

@@ -4,6 +4,8 @@ import LoginForm from './LoginForm';
 
 export const metadata = {
   title: '로그인 · 곳간',
+  // 색인할 내용이 없다. robots.txt에서도 막지만, 링크로 들어온 경우까지 확실히 막는다.
+  robots: { index: false, follow: false },
 };
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {

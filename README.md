@@ -59,6 +59,8 @@ cp .env.example .env.local
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon(publishable) key — 공개되어도 되는 키이며, 접근 제어는 RLS가 담당 |
+| `NEXT_PUBLIC_SITE_URL` | 배포 주소. 사이트맵·canonical의 기준 (Vercel은 자동 감지하므로 생략 가능) |
+| `GOOGLE_SITE_VERIFICATION` | Search Console 소유 확인용 meta 값 (DNS 확인을 쓰면 불필요) |
 
 ### 로그인 흐름
 
@@ -78,6 +80,18 @@ cp .env.example .env.local
 
 > 인증 쿠키와 프록시(구 미들웨어)를 쓰므로 정적 내보내기(`output: 'export'`)로는 동작하지 않습니다.
 > GitHub Pages용 워크플로는 그래서 제거했습니다.
+
+## 검색 노출 (SEO)
+
+`/robots.txt`(`app/robots.ts`)와 `/sitemap.xml`(`app/sitemap.ts`)을 내보냅니다. 절대 URL의
+기준은 `app/lib/site.ts`가 정하며, `NEXT_PUBLIC_SITE_URL` → Vercel의
+`VERCEL_PROJECT_PRODUCTION_URL` → `http://localhost:3000` 순으로 결정됩니다.
+
+색인 대상은 로그인 없이 열리는 `/`, `/allocation`, `/dividend`, `/about` 네 화면입니다.
+`/login`은 `robots.txt`와 페이지 메타데이터 양쪽에서 색인을 막습니다.
+
+배포 후 [Google Search Console](https://search.google.com/search-console)에 도메인을 등록하고
+`https://<배포-주소>/sitemap.xml`을 제출하면 크롤링이 시작됩니다.
 
 ## API
 
