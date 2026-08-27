@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/app/components/AppHeader';
+import ErrorBanner from '@/app/components/ErrorBanner';
 import { DividendSkeleton } from '@/app/components/Skeleton';
+import { type ErrorNotice, toNotice } from '@/app/lib/errors';
 import { type Asset, CATEGORY_COLORS } from '@/app/lib/portfolio';
 import { type SessionUser, loadAssets } from '@/app/lib/portfolio-store';
 import { resolveAssetName } from '@/app/lib/kr-assets';
@@ -23,7 +25,6 @@ import {
   fetchQuotes,
   formatKRW,
   formatKorean,
-  toMessage,
 } from '@/app/lib/quotes';
 
 /** 배당 정보를 한 번에 조회. 실패하면 빈 결과를 돌려준다. */
@@ -174,7 +175,7 @@ function AnnualAmount({ annualKRW }: { annualKRW: number | null }) {
   );
 }
 
-/** 배당락일이 이만큼 안에 남았으면 곧 들어오는 배당으로 강조한다. */
+/** 입금일이 이만큼 안에 남았으면 곧 들어오는 배당으로 강조한다. */
 const IMMINENT_DAYS = 7;
 
 /** 접어둔 상태에서 보여줄 일정 수 */
@@ -192,12 +193,17 @@ interface UpcomingDividend {
   payDate: string | null;
   /** 이번 한 번의 배당으로 받을 금액(원). 환산할 수 없으면 null */
   amountKRW: number | null;
-  /** 배당락일까지 남은 날수 */
+  /** D-데이가 가리키는 날 (YYYY-MM-DD). 입금일을 알면 입금일, 모르면 배당락일 */
+  countdownDate: string;
+  /** D-데이까지 남은 날수 */
   days: number;
 }
 
 /**
- * 배당락일 순으로 정렬한 다가오는 배당 목록.
+ * 돈이 들어오는 순서로 정렬한 다가오는 배당 목록.
+ *
+ * D-데이는 배당락일이 아니라 배당금이 실제로 통장에 꽂히는 날까지 센다. 확정 일정이
+ * 없어 지급일을 모르는 종목만 배당락일까지 센다. (배당 이력에는 지급일이 없다)
  *
  * 이번에 받을 금액은 가장 최근에 지급한 1회분을 그대로 쓴다. 연간 배당금을 횟수로
  * 나누면 배당을 늘린 종목이 실제보다 적게 나온다.
@@ -219,6 +225,7 @@ function upcomingDividends(rows: DividendRow[], exchangeRate: number, today: str
       continue;
     }
 
+    const countdownDate = info.nextPayDate ?? info.nextExDate;
     byTicker.set(asset.ticker, {
       ticker: asset.ticker,
       name,
@@ -226,39 +233,53 @@ function upcomingDividends(rows: DividendRow[], exchangeRate: number, today: str
       estimated: info.nextExDateEstimated,
       payDate: info.nextPayDate,
       amountKRW: amount,
-      days: daysUntil(info.nextExDate, today),
+      countdownDate,
+      days: daysUntil(countdownDate, today),
     });
   }
 
-  return [...byTicker.values()].sort((a, b) => a.exDate.localeCompare(b.exDate));
+  // D-데이가 뒤죽박죽 보이지 않도록 D-데이가 센 날 순으로 늘어놓는다.
+  return [...byTicker.values()].sort(
+    (a, b) => a.countdownDate.localeCompare(b.countdownDate) || a.exDate.localeCompare(b.exDate),
+  );
 }
 
 /**
- * 남은 날수 배지. 배당락일이 가까운 종목만 눈에 띄게 한다.
+ * 남은 날수 배지. 입금이 가까운 종목만 눈에 띄게 한다.
  *
- * 배당 정보는 몇 시간 동안 재사용하므로 확정 배당락일이 그새 지나갈 수 있다.
+ * 배당 정보는 몇 시간 동안 재사용하므로 확정 일정이 그새 지나갈 수 있다.
  * 이미 지난 날짜는 강조하지 않는다.
+ *
+ * 같은 D-3이라도 입금일까지인지 배당락일까지인지에 따라 뜻이 달라, 무엇까지 남은
+ * 날수인지 읽어주는 이름을 붙인다.
  */
-function DDayChip({ days }: { days: number }) {
+function DDayChip({ days, basis }: { days: number; basis: string }) {
   const tone =
     days < 0 ? 'bg-gray-100 text-gray-400' : days <= IMMINENT_DAYS ? 'bg-brand text-white' : 'bg-brand-soft text-brand';
-  return <span className={`chip w-[52px] justify-center ${tone}`}>{dDayLabel(days)}</span>;
+  return (
+    <span aria-label={`${basis}까지 ${dDayLabel(days)}`} className={`chip w-[52px] justify-center ${tone}`}>
+      {dDayLabel(days)}
+    </span>
+  );
 }
 
-/** 다가오는 배당 한 줄. 배당락일과 그 배당이 들어오는 날을 함께 보여준다. */
-function UpcomingRow({ item, withYear }: { item: UpcomingDividend; withYear: boolean }) {
+/** 다가오는 배당 한 줄. D-데이는 입금일까지, 배당락일은 언제까지 사야 하는지로 읽는다. */
+function UpcomingRow({ item, currentYear }: { item: UpcomingDividend; currentYear: string }) {
+  /** 해가 바뀐 뒤의 날짜는 연도를 붙여야 몇 월인지 헷갈리지 않는다. */
+  const withYear = (dateKey: string) => ({ withYear: dateKey.slice(0, 4) !== currentYear });
+
   return (
     <li className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5 last:border-b-0">
-      <DDayChip days={item.days} />
+      <DDayChip days={item.days} basis={item.payDate ? '입금' : '배당락'} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-bold text-gray-900">{item.name}</p>
         <p className="mt-0.5 truncate text-[12px] text-gray-500">
-          {formatExDate(item.exDate, { withYear })} 배당락
+          {formatExDate(item.exDate, withYear(item.exDate))} 배당락
           {item.estimated && <span className="text-gray-400"> (예상)</span>}
           {item.payDate && (
             <>
               <span aria-hidden="true" className="text-gray-300"> · </span>
-              {formatExDate(item.payDate)} 입금
+              {formatExDate(item.payDate, withYear(item.payDate))} 입금
             </>
           )}
         </p>
@@ -271,7 +292,7 @@ function UpcomingRow({ item, withYear }: { item: UpcomingDividend; withYear: boo
 }
 
 /**
- * 배당락일 순으로 늘어놓은 다가오는 배당 일정.
+ * 배당금이 들어오는 순서로 늘어놓은 다가오는 배당 일정.
  *
  * 종목별 표는 금액이 큰 순서라 언제 들어오는지 읽기 어려워, 날짜 순 목록을 따로 둔다.
  */
@@ -279,7 +300,6 @@ function UpcomingDividends({ items, today }: { items: UpcomingDividend[]; today:
   const [isExpanded, setIsExpanded] = useState(false);
   if (items.length === 0) return null;
 
-  /** 해가 바뀐 뒤의 배당락일은 연도를 붙여야 몇 월인지 헷갈리지 않는다. */
   const currentYear = today.slice(0, 4);
 
   const hidden = items.length - UPCOMING_PREVIEW;
@@ -288,16 +308,14 @@ function UpcomingDividends({ items, today }: { items: UpcomingDividend[]; today:
   return (
     <section>
       <SectionTitle
-        action={
-          <span className="text-[12px] text-gray-400">배당락일 전날까지 보유해야 받아요</span>
-        }
+        action={<span className="text-[12px] text-gray-400">D-데이는 입금일 기준이에요</span>}
       >
         다가오는 배당
       </SectionTitle>
       <div className="card overflow-hidden">
         <ul>
           {visible.map((item) => (
-            <UpcomingRow key={item.ticker} item={item} withYear={item.exDate.slice(0, 4) !== currentYear} />
+            <UpcomingRow key={item.ticker} item={item} currentYear={currentYear} />
           ))}
         </ul>
         {hidden > 0 && (
@@ -533,7 +551,9 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
   const [isLoading, setIsLoading] = useState(true);
   /** 배당 정보를 받아둔 티커 목록. 보유 종목과 다르면 아직 불러오는 중이다. */
   const [loadedTickerKey, setLoadedTickerKey] = useState('');
-  const [syncError, setSyncError] = useState('');
+  const [syncError, setSyncError] = useState<ErrorNotice | null>(null);
+  /** 값을 올릴 때마다 보유 자산을 다시 읽는다. (오류 띠의 '다시 시도') */
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -543,7 +563,9 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
         const stored = await loadAssets(userId);
         if (!cancelled) setAssets(stored);
       } catch (e) {
-        if (!cancelled) setSyncError(toMessage(e, '보유 자산을 불러오지 못했습니다.'));
+        if (!cancelled) {
+          setSyncError({ ...toNotice(e, '보유 자산을 불러오지 못했습니다.'), retryable: true });
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -552,7 +574,13 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, reloadKey]);
+
+  const reload = useCallback(() => {
+    setSyncError(null);
+    setIsLoading(true);
+    setReloadKey((key) => key + 1);
+  }, []);
 
   // 보유 티커 목록. 구성이 바뀔 때만 다시 불러오도록 문자열로 만든다.
   const tickerKey = [...new Set(assets.map((a) => a.ticker))].sort().join(',');
@@ -618,7 +646,7 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
 
       <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
         {syncError && (
-          <div className="rounded-2xl bg-up-soft px-4 py-3 text-[14px] font-medium text-up">{syncError}</div>
+          <ErrorBanner notice={syncError} onRetry={syncError.retryable ? reload : undefined} />
         )}
 
         {assets.length === 0 ? (
@@ -646,10 +674,11 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
                 {/* 가장 가까운 배당은 스크롤하지 않고도 보이도록 요약에 함께 둔다. */}
                 {upcoming[0] && (
                   <p className="mt-3.5 inline-flex flex-wrap items-center gap-x-1.5 rounded-full bg-brand-soft px-3 py-1.5 text-[13px] font-semibold text-brand">
-                    <span>가장 가까운 배당</span>
+                    {/* 날짜와 D-데이는 같은 날을 가리켜야 하므로, 무엇의 날짜인지도 함께 밝힌다. */}
+                    <span>{upcoming[0].payDate ? '가장 가까운 입금' : '가장 가까운 배당락'}</span>
                     <span aria-hidden="true" className="text-brand/40">·</span>
                     <span className="tnum">
-                      {formatExDate(upcoming[0].exDate)} {dDayLabel(upcoming[0].days)}
+                      {formatExDate(upcoming[0].countdownDate)} {dDayLabel(upcoming[0].days)}
                     </span>
                     <span aria-hidden="true" className="text-brand/40">·</span>
                     <span className="max-w-[10rem] truncate">{upcoming[0].name}</span>

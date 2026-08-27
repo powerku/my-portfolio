@@ -30,20 +30,6 @@ export async function fetchQuotes(tickers: string[]): Promise<Record<string, Quo
   }
 }
 
-/**
- * 에러를 화면에 띄울 문구로 변환.
- * Supabase의 PostgrestError는 Error 인스턴스가 아니라 `{ message, ... }` 객체다.
- */
-export function toMessage(e: unknown, fallback: string): string {
-  let detail = '';
-  if (typeof e === 'string') {
-    detail = e;
-  } else if (e && typeof e === 'object' && typeof (e as { message?: unknown }).message === 'string') {
-    detail = (e as { message: string }).message;
-  }
-  return detail ? `${fallback} (${detail})` : fallback;
-}
-
 /** 원화로 변환 */
 export function toKRW(amount: number, currency: Currency, exchangeRate: number): number {
   return currency === 'USD' ? amount * exchangeRate : amount;

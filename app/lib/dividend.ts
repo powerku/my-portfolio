@@ -66,7 +66,7 @@ export function todayKey(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-/** 오늘부터 배당락일까지 남은 날수. 오늘이면 0, 지난 날짜면 음수. */
+/** 오늘부터 그 날짜까지 남은 날수. 오늘이면 0, 지난 날짜면 음수. */
 export function daysUntil(dateKey: string, today: string = todayKey()): number {
   const toUTC = (key: string) => {
     const [year, month, day] = key.split('-').map(Number);
@@ -75,7 +75,7 @@ export function daysUntil(dateKey: string, today: string = todayKey()): number {
   return Math.round((toUTC(dateKey) - toUTC(today)) / (24 * 60 * 60 * 1000));
 }
 
-/** 남은 날수 표기. 배당락일 당일은 이미 늦어서 사는 날이 아니므로 '오늘'로만 알린다. */
+/** 남은 날수 표기. 당일은 D-0보다 '오늘'이 바로 읽힌다. */
 export function dDayLabel(days: number): string {
   if (days === 0) return '오늘';
   if (days === 1) return '내일';

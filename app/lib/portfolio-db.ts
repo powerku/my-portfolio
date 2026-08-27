@@ -1,4 +1,5 @@
 import { createClient } from '@/app/lib/supabase/client';
+import { withAuthRetry } from '@/app/lib/supabase/session';
 import {
   type Allocations,
   type Asset,
@@ -43,44 +44,49 @@ function assetToRow(asset: Asset, userId: string) {
   };
 }
 
+/*
+ * 아래 호출은 모두 withAuthRetry를 거친다. 만료된 토큰으로 나간 요청을 한 번 되살리고,
+ * 살아나지 않으면 SessionExpiredError로 바꿔 화면이 "다시 로그인"을 안내하게 한다.
+ * (app/lib/supabase/session.ts)
+ */
+
 export async function fetchAssets(): Promise<Asset[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from('assets')
-    .select('id, user_id, ticker, category, quantity, purchase_price, purchase_currency')
-    .order('created_at', { ascending: true });
+  const rows = await withAuthRetry<AssetRow[]>(() =>
+    supabase
+      .from('assets')
+      .select('id, user_id, ticker, category, quantity, purchase_price, purchase_currency')
+      .order('created_at', { ascending: true }),
+  );
 
-  if (error) throw error;
-  return (data as AssetRow[]).map(rowToAsset);
+  return (rows ?? []).map(rowToAsset);
 }
 
 /** 신규 등록 / 수정 모두 upsert로 처리 (id는 클라이언트에서 crypto.randomUUID로 생성) */
 export async function upsertAsset(asset: Asset, userId: string): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from('assets').upsert(assetToRow(asset, userId));
-  if (error) throw error;
+  await withAuthRetry(() => supabase.from('assets').upsert(assetToRow(asset, userId)));
 }
 
 export async function upsertAssets(assets: Asset[], userId: string): Promise<void> {
   if (assets.length === 0) return;
   const supabase = createClient();
-  const { error } = await supabase.from('assets').upsert(assets.map((a) => assetToRow(a, userId)));
-  if (error) throw error;
+  await withAuthRetry(() => supabase.from('assets').upsert(assets.map((a) => assetToRow(a, userId))));
 }
 
 export async function deleteAsset(id: string): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from('assets').delete().eq('id', id);
-  if (error) throw error;
+  await withAuthRetry(() => supabase.from('assets').delete().eq('id', id));
 }
 
 export async function fetchAllocations(): Promise<Allocations> {
   const supabase = createClient();
-  const { data, error } = await supabase.from('allocations').select('category, target_pct');
-  if (error) throw error;
+  const rows = await withAuthRetry<{ category: string; target_pct: number }[]>(() =>
+    supabase.from('allocations').select('category, target_pct'),
+  );
 
   const allocations = emptyAllocations();
-  for (const row of data as { category: string; target_pct: number }[]) {
+  for (const row of rows ?? []) {
     if (isAssetCategory(row.category)) {
       allocations[row.category] = Number(row.target_pct);
     }
@@ -95,6 +101,5 @@ export async function saveAllocations(allocations: Allocations, userId: string):
     category,
     target_pct: allocations[category] ?? 0,
   }));
-  const { error } = await supabase.from('allocations').upsert(rows, { onConflict: 'user_id,category' });
-  if (error) throw error;
+  await withAuthRetry(() => supabase.from('allocations').upsert(rows, { onConflict: 'user_id,category' }));
 }

@@ -2,7 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import AppHeader from '@/app/components/AppHeader';
+import ErrorBanner from '@/app/components/ErrorBanner';
 import { PortfolioSkeleton } from '@/app/components/Skeleton';
+import { type ErrorNotice, toMessage, toNotice } from '@/app/lib/errors';
 import {
   type Allocations,
   type Asset,
@@ -33,7 +35,6 @@ import {
   formatKorean,
   quotePriceToKRW,
   toKRW,
-  toMessage,
 } from '@/app/lib/quotes';
 
 interface SearchResult {
@@ -904,8 +905,10 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
   const [quantity, setQuantity] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [error, setError] = useState('');
-  const [syncError, setSyncError] = useState('');
+  const [syncError, setSyncError] = useState<ErrorNotice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  /** 값을 올릴 때마다 최초 로드를 다시 돌린다. (오류 띠의 '다시 시도') */
+  const [reloadKey, setReloadKey] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number>(0);
@@ -944,7 +947,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
             if (seeded) setAssets(seeded);
           } catch (e) {
             if (cancelled) return;
-            setSyncError(toMessage(e, '기본 포트폴리오를 만들지 못했습니다.'));
+            setSyncError({ ...toNotice(e, '기본 포트폴리오를 만들지 못했습니다.'), retryable: true });
           }
         }
 
@@ -952,7 +955,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
         const allocations = migrated.allocations ?? storedAllocations;
         setTargetAllocations(hasAllocations(allocations) ? allocations : defaultAllocations());
       } catch (e) {
-        if (!cancelled) setSyncError(toMessage(e, '데이터를 불러오지 못했습니다.'));
+        if (!cancelled) setSyncError({ ...toNotice(e, '데이터를 불러오지 못했습니다.'), retryable: true });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -961,7 +964,14 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, reloadKey]);
+
+  /** 처음부터 다시 읽어온다. 저장에 실패한 뒤에도 서버의 진짜 상태로 되돌리는 길이 된다. */
+  const reload = useCallback(() => {
+    setSyncError(null);
+    setIsLoading(true);
+    setReloadKey((key) => key + 1);
+  }, []);
 
   // 목표 비중은 입력할 때마다 저장하면 요청이 과해지므로 잠깐 모았다가 저장한다.
   const scheduleAllocationSave = useCallback(
@@ -969,7 +979,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
       if (allocationSaveTimerRef.current) clearTimeout(allocationSaveTimerRef.current);
       allocationSaveTimerRef.current = setTimeout(() => {
         storeAllocations(userId, next).catch((e) =>
-          setSyncError(toMessage(e, '목표 비중을 저장하지 못했습니다.')),
+          setSyncError(toNotice(e, '목표 비중을 저장하지 못했습니다.')),
         );
       }, 600);
     },
@@ -983,7 +993,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
   }, []);
 
   function handleAllocationsChange(next: Allocations) {
-    setSyncError('');
+    setSyncError(null);
     setTargetAllocations(next);
     scheduleAllocationSave(next);
   }
@@ -1048,7 +1058,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
         setError(toMessage(err, '자산을 저장하지 못했습니다.'));
         return;
       }
-      setSyncError('');
+      setSyncError(null);
       setAssets((prev) => [...prev, newAsset]);
       search.reset();
       setQuantity('');
@@ -1059,19 +1069,19 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
 
   async function handleDelete(id: string) {
     const previous = assets;
-    setSyncError('');
+    setSyncError(null);
     setAssets((prev) => prev.filter((a) => a.id !== id));
     try {
       await removeAssetFromStore(userId, id);
     } catch (err) {
       setAssets(previous);
-      setSyncError(toMessage(err, '자산을 삭제하지 못했습니다.'));
+      setSyncError(toNotice(err, '자산을 삭제하지 못했습니다.'));
     }
   }
 
   async function handleEditSave(updated: Asset) {
     const previous = assets;
-    setSyncError('');
+    setSyncError(null);
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     setEditingAsset(null);
 
@@ -1079,7 +1089,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
       await saveAsset(userId, updated);
     } catch (err) {
       setAssets(previous);
-      setSyncError(toMessage(err, '자산을 수정하지 못했습니다.'));
+      setSyncError(toNotice(err, '자산을 수정하지 못했습니다.'));
     }
   }
 
@@ -1182,7 +1192,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
 
       <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
         {syncError && (
-          <div className="rounded-2xl bg-up-soft px-4 py-3 text-[14px] font-medium text-up">{syncError}</div>
+          <ErrorBanner notice={syncError} onRetry={syncError.retryable ? reload : undefined} />
         )}
 
         {editingAsset && (

@@ -31,10 +31,16 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // getUser()를 호출해야 토큰 갱신이 일어난다. 이 호출을 빼면 세션이 임의로 끊긴다.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /*
+   * getUser()를 호출해야 토큰 갱신이 일어난다. 이 호출을 빼면 세션이 임의로 끊긴다.
+   *
+   * 실패는 비로그인으로 본다. 모든 화면이 로그인 없이도 열리므로, Supabase에 닿지
+   * 못했다고 해서 화면 전체를 500으로 막을 이유가 없다. (세션은 다음 요청에 다시 확인한다)
+   */
+  const user = await supabase.auth
+    .getUser()
+    .then(({ data }) => data.user)
+    .catch(() => null);
 
   const { pathname } = request.nextUrl;
 
