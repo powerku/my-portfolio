@@ -20,6 +20,7 @@ import {
   upsertAsset,
 } from '@/app/lib/portfolio-db';
 import { migrateLegacyData } from '@/app/lib/portfolio-migration';
+import { seedDefaultAssets } from '@/app/lib/portfolio-seed';
 import { resolveAssetName } from '@/app/lib/kr-assets';
 import {
   type Quote,
@@ -912,6 +913,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
   const allocationSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 최초 로드: Supabase에서 읽고, 남아있는 localStorage 데이터가 있으면 한 번 옮긴다.
+  // 받아올 자산이 하나도 없는 첫 로그인이면 기본 포트폴리오를 채워 넣는다.
   useEffect(() => {
     let cancelled = false;
 
@@ -926,7 +928,19 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
         const migrated = await migrateLegacyData(userId, serverAssets, serverAllocations);
         if (cancelled) return;
 
-        setAssets(migrated.assets ?? serverAssets);
+        const loaded = migrated.assets ?? serverAssets;
+        setAssets(loaded);
+
+        if (loaded.length === 0) {
+          try {
+            const seeded = await seedDefaultAssets(userId);
+            if (cancelled) return;
+            if (seeded) setAssets(seeded);
+          } catch (e) {
+            if (cancelled) return;
+            setSyncError(toMessage(e, '기본 포트폴리오를 만들지 못했습니다.'));
+          }
+        }
 
         // 저장된 목표 비중이 하나도 없으면 기본 배분을 보여준다. (값을 건드릴 때 저장된다)
         const allocations = migrated.allocations ?? serverAllocations;

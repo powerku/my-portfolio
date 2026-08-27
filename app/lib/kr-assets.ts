@@ -74,6 +74,12 @@ export const KR_STOCKS: KrStock[] = [
   { ticker: '114800.KS', name: 'KODEX 인버스', typeDisp: 'ETF' },
   { ticker: '148020.KS', name: 'KBSTAR 미국S&P500', typeDisp: 'ETF' },
   { ticker: '453850.KS', name: 'KODEX 미국반도체MV', typeDisp: 'ETF' },
+  // 채권·금 ETF (기본 포트폴리오에서 쓴다)
+  { ticker: '148070.KS', name: 'KOSEF 국고채10년', typeDisp: 'ETF' },
+  { ticker: '385560.KS', name: 'RISE 국고채30년Enhanced', typeDisp: 'ETF' },
+  { ticker: '114260.KS', name: 'KODEX 국고채3년', typeDisp: 'ETF' },
+  { ticker: '411060.KS', name: 'ACE KRX금현물', typeDisp: 'ETF' },
+  { ticker: '132030.KS', name: 'KODEX 골드선물(H)', typeDisp: 'ETF' },
 ];
 
 // 주요 암호화폐 목록

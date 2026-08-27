@@ -1,9 +1,7 @@
-import YahooFinance from 'yahoo-finance2';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest } from 'next/server';
-import { isKoreanTicker, resolveAssetName } from '@/app/lib/kr-assets';
-
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+import { resolveAssetName } from '@/app/lib/kr-assets';
+import { fetchYahooQuotes } from '@/app/lib/yahoo';
 
 /** 시세를 재사용하는 시간(초) */
 const REVALIDATE_SECONDS = 60;
@@ -22,26 +20,16 @@ interface QuoteResult {
 /**
  * 티커 묶음을 Yahoo Finance에 한 번에 물어보고 티커별로 정리해 돌려준다.
  *
- * 국내 종목은 한글 이름을 받기 위해 `lang: ko-KR`로 조회해야 하는데, 이 옵션을
- * 해외 종목에까지 걸면 표기 통화가 달라질 위험이 있다. 그래서 국내/해외를 나눠
- * 각각 배치로 호출한다. (호출 수는 티커 개수와 무관하게 최대 2회)
- *
  * unstable_cache의 캐시 키에 인자가 포함되므로, 같은 티커 조합이면
  * REVALIDATE_SECONDS 동안 Yahoo를 다시 호출하지 않는다. 호출부에서 티커를
  * 정렬·중복 제거해 넘겨야 캐시가 제대로 맞는다.
  */
 const getQuotes = unstable_cache(
   async (tickers: string[]): Promise<Record<string, QuoteResult>> => {
-    const korean = tickers.filter(isKoreanTicker);
-    const overseas = tickers.filter((t) => !isKoreanTicker(t));
-
-    const [koreanQuotes, overseasQuotes] = await Promise.all([
-      korean.length > 0 ? yahooFinance.quote(korean, { lang: 'ko-KR', region: 'KR' }) : [],
-      overseas.length > 0 ? yahooFinance.quote(overseas) : [],
-    ]);
+    const quotes = await fetchYahooQuotes(tickers);
 
     const bySymbol = new Map(
-      [...koreanQuotes, ...overseasQuotes].map((q) => [
+      quotes.map((q) => [
         q.symbol.toUpperCase(),
         {
           ticker: q.symbol,
