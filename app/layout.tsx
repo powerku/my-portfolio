@@ -22,7 +22,10 @@ export const metadata: Metadata = {
     url: "/",
     title: "곳간 — 내 자산 포트폴리오",
     description: DESCRIPTION,
+    // 이미지는 app/opengraph-image.tsx가 넣는다.
   },
+  // 카톡·슬랙은 og만 보지만, X는 큰 카드로 띄우려면 이 선언이 필요하다.
+  twitter: { card: "summary_large_image" },
   /*
    * Search Console에서 "HTML 태그" 방식으로 소유를 확인할 때 쓴다.
    * 대시보드가 준 content 값을 GOOGLE_SITE_VERIFICATION 환경 변수에 넣으면 meta가 붙는다.

@@ -93,6 +93,15 @@ cp .env.example .env.local
 배포 후 [Google Search Console](https://search.google.com/search-console)에 도메인을 등록하고
 `https://<배포-주소>/sitemap.xml`을 제출하면 크롤링이 시작됩니다.
 
+### 공유 카드 이미지
+
+링크를 카톡·슬랙·X에 붙였을 때 뜨는 1200×630 카드를 `next/og`로 빌드 때 굽습니다
+(`app/og/card.tsx` → `/opengraph-image`, `/twitter-image`). 오른쪽 자산 구성 패널은
+`defaultAllocations()` 값을 그대로 그리므로 실제 화면과 어긋나지 않습니다.
+
+카드에 쓰는 폰트는 저장소 안 서브셋입니다. **한글 문구를 새로 추가하면 폰트를 다시 구워야
+합니다** — 방법은 [`assets/README.md`](assets/README.md)에 있습니다.
+
 ## API
 
 모두 서버에서 Yahoo Finance를 중계하며 사용자 데이터를 다루지 않습니다. 인증이 필요 없고,
