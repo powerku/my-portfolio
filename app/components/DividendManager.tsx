@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/app/components/AppHeader';
 import { type Asset, CATEGORY_COLORS } from '@/app/lib/portfolio';
-import { fetchAssets } from '@/app/lib/portfolio-db';
+import { type SessionUser, loadAssets } from '@/app/lib/portfolio-store';
 import { resolveAssetName } from '@/app/lib/kr-assets';
 import {
   type DividendInfo,
@@ -270,7 +270,9 @@ const COLUMNS: { label: string; align: 'left' | 'right' }[] = [
   { label: '연간 배당금', align: 'right' },
 ];
 
-export default function DividendManager({ userId, userEmail }: { userId: string; userEmail: string }) {
+export default function DividendManager({ user }: { user: SessionUser | null }) {
+  // 로그인 사용자는 Supabase, 비로그인 사용자는 브라우저에서 읽는다. (portfolio-store)
+  const userId = user?.id ?? null;
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [dividends, setDividends] = useState<Record<string, DividendInfo>>({});
@@ -285,8 +287,8 @@ export default function DividendManager({ userId, userEmail }: { userId: string;
 
     (async () => {
       try {
-        const serverAssets = await fetchAssets();
-        if (!cancelled) setAssets(serverAssets);
+        const stored = await loadAssets(userId);
+        if (!cancelled) setAssets(stored);
       } catch (e) {
         if (!cancelled) setSyncError(toMessage(e, '보유 자산을 불러오지 못했습니다.'));
       } finally {
@@ -349,7 +351,7 @@ export default function DividendManager({ userId, userEmail }: { userId: string;
   if (isLoading) {
     return (
       <>
-        <AppHeader userEmail={userEmail} exchangeRate={exchangeRate} active="/dividend" />
+        <AppHeader user={user} exchangeRate={exchangeRate} active="/dividend" />
         <div className="mx-auto w-full max-w-5xl space-y-4 px-5 py-8">
           <div className="h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
           <div className="h-36 animate-pulse rounded-[20px] bg-gray-200" />
@@ -361,7 +363,7 @@ export default function DividendManager({ userId, userEmail }: { userId: string;
 
   return (
     <>
-      <AppHeader userEmail={userEmail} exchangeRate={exchangeRate} active="/dividend" />
+      <AppHeader user={user} exchangeRate={exchangeRate} active="/dividend" />
 
       <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
         {syncError && (

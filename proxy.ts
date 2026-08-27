@@ -1,14 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-/** 로그인 없이 접근할 수 있는 경로 */
-function isPublicPath(pathname: string) {
-  return pathname.startsWith('/login') || pathname.startsWith('/auth');
-}
-
 /**
- * 만료된 세션 토큰을 갱신해 응답 쿠키에 실어 보내고, 비로그인 접근을 /login으로 돌린다.
+ * 만료된 세션 토큰을 갱신해 응답 쿠키에 실어 보낸다.
  * (Next.js 16부터 middleware 파일 규약은 proxy로 이름이 바뀌었다.)
+ *
+ * 모든 화면은 로그인 없이도 열린다. (비로그인 데이터는 localStorage에 담긴다)
+ * 그래서 여기서 막는 건 이미 로그인한 사용자의 /login 접근뿐이다.
  */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -39,13 +37,6 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-
-  if (!user && !isPublicPath(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.search = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname)}`;
-    return NextResponse.redirect(url);
-  }
 
   if (user && pathname.startsWith('/login')) {
     const url = request.nextUrl.clone();

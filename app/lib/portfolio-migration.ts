@@ -1,57 +1,7 @@
-import {
-  type Allocations,
-  type Asset,
-  type AssetCategory,
-  type Currency,
-  CATEGORIES,
-  hasAllocations,
-  isAssetCategory,
-} from '@/app/lib/portfolio';
+import { type Allocations, type Asset, hasAllocations } from '@/app/lib/portfolio';
 import { saveAllocations, upsertAssets } from '@/app/lib/portfolio-db';
-
-const LEGACY_ASSETS_KEY = 'portfolio_assets';
-const LEGACY_ALLOCATIONS_KEY = 'portfolio_allocations';
-
-/** Supabase 이전에 localStorage에 저장해두던 자산 목록 */
-function readLegacyAssets(): Asset[] {
-  try {
-    const raw = localStorage.getItem(LEGACY_ASSETS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null)
-      .map((a) => ({
-        id: typeof a.id === 'string' ? a.id : crypto.randomUUID(),
-        ticker: String(a.ticker ?? '').toUpperCase(),
-        category: isAssetCategory(a.category) ? a.category : ('기타' as AssetCategory),
-        quantity: Number(a.quantity) || 0,
-        purchasePrice: Number(a.purchasePrice) || 0,
-        purchaseCurrency: (a.purchaseCurrency === 'USD' ? 'USD' : 'KRW') as Currency,
-      }))
-      .filter((a) => a.ticker && a.quantity > 0);
-  } catch {
-    return [];
-  }
-}
-
-function readLegacyAllocations(): Allocations | null {
-  try {
-    const raw = localStorage.getItem(LEGACY_ALLOCATIONS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-
-    const allocations = Object.fromEntries(
-      CATEGORIES.map((c) => [c, Number(parsed[c]) || 0]),
-    ) as Allocations;
-
-    return hasAllocations(allocations) ? allocations : null;
-  } catch {
-    return null;
-  }
-}
+import * as local from '@/app/lib/portfolio-local';
+import { markSeeded } from '@/app/lib/portfolio-seed';
 
 export interface MigrationResult {
   assets: Asset[] | null;
@@ -59,34 +9,41 @@ export interface MigrationResult {
 }
 
 /**
- * 첫 로그인 시 localStorage에 남아있던 데이터를 Supabase로 한 번 옮긴다.
- * 서버에 이미 데이터가 있으면 덮어쓰지 않고 localStorage만 정리한다.
+ * 로그인하면 비로그인 상태에서 브라우저에 담아둔 데이터를 Supabase로 한 번 옮긴다.
+ * 서버에 이미 데이터가 있으면 덮어쓰지 않고 브라우저 쪽만 정리한다.
  *
  * @returns 실제로 업로드한 데이터 (없으면 null) — 호출부에서 화면 상태를 갱신하는 데 사용
  */
-export async function migrateLegacyData(
+export async function migrateGuestData(
   userId: string,
   serverAssets: Asset[],
   serverAllocations: Allocations,
 ): Promise<MigrationResult> {
   const result: MigrationResult = { assets: null, allocations: null };
 
-  const legacyAssets = readLegacyAssets();
-  if (legacyAssets.length > 0) {
+  const localAssets = local.readAssets();
+  if (localAssets.length > 0) {
     if (serverAssets.length === 0) {
-      await upsertAssets(legacyAssets, userId);
-      result.assets = legacyAssets;
+      await upsertAssets(localAssets, userId);
+      result.assets = localAssets;
     }
-    localStorage.removeItem(LEGACY_ASSETS_KEY);
+    local.clearAssets();
   }
 
-  const legacyAllocations = readLegacyAllocations();
-  if (legacyAllocations) {
+  const localAllocations = local.readAllocations();
+  if (localAllocations) {
     if (!hasAllocations(serverAllocations)) {
-      await saveAllocations(legacyAllocations, userId);
-      result.allocations = legacyAllocations;
+      await saveAllocations(localAllocations, userId);
+      result.allocations = localAllocations;
     }
-    localStorage.removeItem(LEGACY_ALLOCATIONS_KEY);
+    local.clearAllocations();
+  }
+
+  // 기본 포트폴리오를 이미 받았다는 표시도 넘겨받는다. 이걸 빼면 비로그인 때 자산을
+  // 전부 지운 사용자가 로그인하는 순간 기본 포트폴리오가 다시 채워진다.
+  if (local.readSeeded()) {
+    await markSeeded(userId);
+    local.clearSeeded();
   }
 
   return result;

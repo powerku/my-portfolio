@@ -13,13 +13,14 @@ import {
   hasAllocations,
 } from '@/app/lib/portfolio';
 import {
-  deleteAsset as deleteAssetRow,
-  fetchAllocations,
-  fetchAssets,
-  saveAllocations,
-  upsertAsset,
-} from '@/app/lib/portfolio-db';
-import { migrateLegacyData } from '@/app/lib/portfolio-migration';
+  type SessionUser,
+  loadAllocations,
+  loadAssets,
+  removeAsset as removeAssetFromStore,
+  saveAsset,
+  storeAllocations,
+} from '@/app/lib/portfolio-store';
+import { migrateGuestData } from '@/app/lib/portfolio-migration';
 import { seedDefaultAssets } from '@/app/lib/portfolio-seed';
 import { resolveAssetName } from '@/app/lib/kr-assets';
 import {
@@ -892,7 +893,9 @@ function AssetCard({
   );
 }
 
-export default function AssetManager({ userId, userEmail }: { userId: string; userEmail: string }) {
+export default function AssetManager({ user }: { user: SessionUser | null }) {
+  // 로그인 사용자는 Supabase, 비로그인 사용자는 브라우저에 저장한다. (portfolio-store)
+  const userId = user?.id ?? null;
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [category, setCategory] = useState<AssetCategory>('미국주식');
@@ -912,23 +915,25 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
   const search = useTickerSearch();
   const allocationSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 최초 로드: Supabase에서 읽고, 남아있는 localStorage 데이터가 있으면 한 번 옮긴다.
-  // 받아올 자산이 하나도 없는 첫 로그인이면 기본 포트폴리오를 채워 넣는다.
+  // 최초 로드: 저장소에서 읽고, 로그인했다면 비로그인 때 담아둔 브라우저 데이터를 한 번 옮긴다.
+  // 자산이 하나도 없는 첫 방문이면 기본 포트폴리오를 채워 넣는다.
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const [serverAssets, serverAllocations] = await Promise.all([
-          fetchAssets(),
-          fetchAllocations(),
+        const [storedAssets, storedAllocations] = await Promise.all([
+          loadAssets(userId),
+          loadAllocations(userId),
         ]);
         if (cancelled) return;
 
-        const migrated = await migrateLegacyData(userId, serverAssets, serverAllocations);
+        const migrated = userId
+          ? await migrateGuestData(userId, storedAssets, storedAllocations)
+          : { assets: null, allocations: null };
         if (cancelled) return;
 
-        const loaded = migrated.assets ?? serverAssets;
+        const loaded = migrated.assets ?? storedAssets;
         setAssets(loaded);
 
         if (loaded.length === 0) {
@@ -943,7 +948,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
         }
 
         // 저장된 목표 비중이 하나도 없으면 기본 배분을 보여준다. (값을 건드릴 때 저장된다)
-        const allocations = migrated.allocations ?? serverAllocations;
+        const allocations = migrated.allocations ?? storedAllocations;
         setTargetAllocations(hasAllocations(allocations) ? allocations : defaultAllocations());
       } catch (e) {
         if (!cancelled) setSyncError(toMessage(e, '데이터를 불러오지 못했습니다.'));
@@ -962,7 +967,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
     (next: Allocations) => {
       if (allocationSaveTimerRef.current) clearTimeout(allocationSaveTimerRef.current);
       allocationSaveTimerRef.current = setTimeout(() => {
-        saveAllocations(next, userId).catch((e) =>
+        storeAllocations(userId, next).catch((e) =>
           setSyncError(toMessage(e, '목표 비중을 저장하지 못했습니다.')),
         );
       }, 600);
@@ -1037,7 +1042,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
     startTransition(async () => {
       try {
-        await upsertAsset(newAsset, userId);
+        await saveAsset(userId, newAsset);
       } catch (err) {
         setError(toMessage(err, '자산을 저장하지 못했습니다.'));
         return;
@@ -1056,7 +1061,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
     setSyncError('');
     setAssets((prev) => prev.filter((a) => a.id !== id));
     try {
-      await deleteAssetRow(id);
+      await removeAssetFromStore(userId, id);
     } catch (err) {
       setAssets(previous);
       setSyncError(toMessage(err, '자산을 삭제하지 못했습니다.'));
@@ -1070,7 +1075,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
     setEditingAsset(null);
 
     try {
-      await upsertAsset(updated, userId);
+      await saveAsset(userId, updated);
     } catch (err) {
       setAssets(previous);
       setSyncError(toMessage(err, '자산을 수정하지 못했습니다.'));
@@ -1172,7 +1177,7 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
   return (
     <>
-      <AppHeader userEmail={userEmail} exchangeRate={exchangeRate} active="/" />
+      <AppHeader user={user} exchangeRate={exchangeRate} active="/" />
 
       <main className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
         {syncError && (

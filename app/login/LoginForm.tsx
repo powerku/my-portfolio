@@ -1,12 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import LinkError from './LinkError';
 import { createClient } from '@/app/lib/supabase/client';
 
-export default function LoginForm({ next }: { next?: string }) {
+export default function LoginForm({ next, linkError }: { next?: string; linkError?: string | null }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState('');
+  const router = useRouter();
+
+  /**
+   * 로그인 링크가 이 화면으로 떨어졌을 때의 대비.
+   *
+   * Supabase Site URL 설정에 따라 링크가 `/auth/callback`이 아니라 `/login?code=...`로
+   * 올 수 있다. 그러면 브라우저 SDK가 code를 알아서 교환하고 주소에서 code만 지우기
+   * 때문에(auth-js의 detectSessionInUrl) 세션은 생겼는데 로그인 폼이 그대로 보인다.
+   * 세션이 생기는 순간 화면을 넘겨준다.
+   */
+  useEffect(() => {
+    const supabase = createClient();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) return;
+      // 오픈 리다이렉트 방지: 같은 사이트 내부 경로만 허용
+      const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      router.replace(target);
+      router.refresh();
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, [next, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,6 +90,8 @@ export default function LoginForm({ next }: { next?: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <LinkError initial={linkError} />
+
       <div>
         <label htmlFor="email" className="label">
           이메일

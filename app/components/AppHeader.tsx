@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { signOut } from '@/app/auth/actions';
+import { type SessionUser } from '@/app/lib/portfolio-store';
 
 /** 상단 탭. 화면을 추가하면 여기만 늘리면 된다. */
 const TABS = [
@@ -16,13 +17,15 @@ export type AppTab = (typeof TABS)[number]['href'];
  *
  * 환율은 화면마다 따로 조회하므로(시세 요청에 얹어서 받는다) 값을 받아 표시만 한다.
  * 아직 못 받았으면 0을 넘겨 칩을 숨긴다.
+ *
+ * user가 null이면 비로그인 상태다. 이때는 로그아웃 대신 로그인 버튼을 보여준다.
  */
 export default function AppHeader({
-  userEmail,
+  user,
   exchangeRate,
   active,
 }: {
-  userEmail: string;
+  user: SessionUser | null;
   exchangeRate: number;
   active: AppTab;
 }) {
@@ -63,15 +66,32 @@ export default function AppHeader({
               $1 = {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원
             </span>
           )}
-          <span className="hidden max-w-[160px] truncate text-[13px] text-gray-500 md:block">{userEmail}</span>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
-            >
-              로그아웃
-            </button>
-          </form>
+          {user ? (
+            <>
+              <span className="hidden max-w-[160px] truncate text-[13px] text-gray-500 md:block">
+                {user.email}
+              </span>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                >
+                  로그아웃
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <span className="hidden text-[13px] text-gray-400 md:block">이 기기에만 저장 중</span>
+              {/* 로그인 후 보고 있던 화면으로 돌아온다. */}
+              <Link
+                href={active === '/' ? '/login' : `/login?next=${encodeURIComponent(active)}`}
+                className="btn btn-primary shrink-0 rounded-[10px] px-3.5 py-1.5 text-[13px]"
+              >
+                로그인
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
