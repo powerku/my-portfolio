@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import AppHeader from '@/app/components/AppHeader';
+import { PortfolioSkeleton } from '@/app/components/Skeleton';
 import {
   type Allocations,
   type Asset,
@@ -52,7 +53,7 @@ function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Cu
           onClick={() => onChange(c)}
           className={`rounded-lg px-2.5 py-1 transition-colors ${
             value === c
-              ? 'bg-white text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+              ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -214,7 +215,7 @@ function TickerInput({
         </span>
       )}
       {showDropdown && (
-        <ul className="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl bg-white py-1 shadow-pop">
+        <ul className="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl bg-surface py-1 pop">
           {suggestions.map((item, idx) => (
             <li
               key={item.ticker}
@@ -462,11 +463,11 @@ function EditModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 backdrop-blur-[2px] sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-[2px] sm:items-center"
       onMouseDown={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-[24px] bg-white p-6 pb-8 shadow-pop sm:rounded-[24px] sm:pb-6"
+        className="w-full max-w-md rounded-t-[24px] bg-surface p-6 pb-8 pop sm:rounded-[24px] sm:pb-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-gray-200 sm:hidden" />
@@ -1165,13 +1166,13 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
     return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
   });
 
+  // 상단 바는 이미 그릴 수 있으므로 그대로 두고 본문만 스켈레톤으로 채운다.
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-4 px-5 py-8">
-        <div className="h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
-        <div className="h-36 animate-pulse rounded-[20px] bg-gray-200" />
-        <div className="h-64 animate-pulse rounded-[20px] bg-gray-200" />
-      </div>
+      <>
+        <AppHeader user={user} exchangeRate={exchangeRate} active="/" />
+        <PortfolioSkeleton />
+      </>
     );
   }
 

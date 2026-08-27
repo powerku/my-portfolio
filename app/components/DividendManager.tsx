@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/app/components/AppHeader';
+import { DividendSkeleton } from '@/app/components/Skeleton';
 import { type Asset, CATEGORY_COLORS } from '@/app/lib/portfolio';
 import { type SessionUser, loadAssets } from '@/app/lib/portfolio-store';
 import { resolveAssetName } from '@/app/lib/kr-assets';
@@ -345,21 +346,22 @@ function MonthlyTooltip({ month, rows }: { month: number; rows: DividendRow[] })
   const total = items.reduce((sum, item) => sum + item.amount, 0);
 
   return (
-    <div className="rounded-2xl bg-gray-900/95 px-3.5 py-3 shadow-pop">
+    /* 배경을 반전시키는 패널이라 회색 계단(다크에서 뒤집힌다) 대신 inverse 토큰을 쓴다. */
+    <div className="rounded-2xl bg-inverse/95 px-3.5 py-3 pop">
       <p className="flex items-baseline justify-between gap-3">
-        <span className="text-[12px] font-semibold text-gray-300">{month}월</span>
-        <span className="tnum text-[13px] font-bold text-white">
+        <span className="text-[12px] font-semibold text-inverse-fg/65">{month}월</span>
+        <span className="tnum text-[13px] font-bold text-inverse-fg">
           {formatKRW(Math.round(total))}원
         </span>
       </p>
       {items.length === 0 ? (
-        <p className="mt-1.5 text-[12px] text-gray-400">예상 배당 없음</p>
+        <p className="mt-1.5 text-[12px] text-inverse-fg/55">예상 배당 없음</p>
       ) : (
-        <ul className="mt-2 space-y-1 border-t border-white/15 pt-2">
+        <ul className="mt-2 space-y-1 border-t border-inverse-fg/15 pt-2">
           {items.map((item) => (
             <li key={item.ticker} className="flex items-baseline justify-between gap-3 text-[12px]">
-              <span className="min-w-0 truncate text-gray-200">{item.name}</span>
-              <span className="tnum shrink-0 font-semibold text-white">
+              <span className="min-w-0 truncate text-inverse-fg/80">{item.name}</span>
+              <span className="tnum shrink-0 font-semibold text-inverse-fg">
                 {formatKRW(Math.round(item.amount))}원
               </span>
             </li>
@@ -605,11 +607,7 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
     return (
       <>
         <AppHeader user={user} exchangeRate={exchangeRate} active="/dividend" />
-        <div className="mx-auto w-full max-w-5xl space-y-4 px-5 py-8">
-          <div className="h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
-          <div className="h-36 animate-pulse rounded-[20px] bg-gray-200" />
-          <div className="h-64 animate-pulse rounded-[20px] bg-gray-200" />
-        </div>
+        <DividendSkeleton />
       </>
     );
   }

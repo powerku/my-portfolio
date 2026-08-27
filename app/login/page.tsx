@@ -24,7 +24,7 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
+    <div className="flex-1 flex flex-col bg-surface">
       {/* 로그인 없이도 화면을 쓸 수 있으므로 언제든 돌아갈 길을 열어둔다. */}
       <div className="px-6 pt-5">
         <Link

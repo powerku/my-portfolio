@@ -1,9 +1,27 @@
 @import "tailwindcss";
 
+/*
+ * 테마 스위치는 `<html data-theme="light|dark">` 하나다.
+ * 값은 head의 인라인 스크립트가 첫 페인트 전에 넣는다. (app/lib/theme.ts)
+ * 스크립트가 실패하면 아무 속성도 없는 상태 = 라이트로 안전하게 남는다.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* 토스/뱅크샐러드 계열 한국 핀테크 UI 토큰 */
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
     system-ui, Roboto, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  /*
+   * 표면은 색이 아니라 역할로 부른다. 다크에서 명암이 뒤집혀도 뜻이 그대로 남는다.
+   * (bg-white 를 그대로 쓰면 다크에서 흰 카드가 남는다.)
+   */
+  --color-canvas: #f2f4f6; /* 페이지 바닥 */
+  --color-surface: #ffffff; /* 카드·바텀시트·드롭다운·헤더 */
+  --color-raised: #ffffff; /* gray-100 트랙 위로 떠오르는 것 (세그먼트, 포커스된 입력) */
+  --color-scrim: rgb(25 31 40 / 0.45); /* 모달 뒤를 덮는 막 */
+  --color-inverse: #191f28; /* 배경을 반전시키는 패널 (툴팁) */
+  --color-inverse-fg: #ffffff;
 
   --color-gray-50: #f9fafb;
   --color-gray-100: #f2f4f6;
@@ -29,17 +47,78 @@
   --color-warn: #ff9500;
   --color-warn-soft: #fff6e5;
 
+}
+
+/*
+ * 그림자는 @theme 이 아니라 여기 둔다. @theme 의 --shadow-* 는 shadow-card 같은
+ * 유틸리티를 만들면서 값을 그 자리에 박아 넣기 때문에(--tw-shadow), 아래에서 변수를
+ * 덮어써도 다크에서 바뀌지 않는다. 대신 .card / .pop 컴포넌트 클래스로 쓴다.
+ */
+:root {
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
   --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.06), 0 16px 40px rgba(0, 0, 0, 0.12);
+
+  /* 스켈레톤 위를 지나가는 빛. 바탕(gray-200)보다 밝아야 움직임이 보인다. */
+  --skeleton-sheen: rgb(255 255 255 / 0.7);
+}
+
+/*
+ * 다크 팔레트. @theme 이 :root 에 심어둔 변수를 같은 이름으로 덮어쓰기 때문에
+ * 컴포넌트의 text-gray-900 / bg-gray-100 같은 유틸리티가 손대지 않아도 따라온다.
+ * 레이어 밖 규칙이라 @layer theme 의 :root 보다 우선한다.
+ */
+html[data-theme="dark"] {
+  --color-canvas: #12161c;
+  --color-surface: #1b2029;
+  --color-raised: #333c4a;
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-inverse: #2f3846; /* 다크에서는 반전 패널이 배경보다 밝아야 떠 보인다 */
+  --color-inverse-fg: #f2f5f8;
+
+  /* 회색 계단을 뒤집는다. 100은 여전히 '옅은 채움', 900은 여전히 '가장 진한 글자'. */
+  --color-gray-50: #232935;
+  --color-gray-100: #272e3a;
+  --color-gray-200: #333c4a;
+  --color-gray-300: #4a5462;
+  --color-gray-400: #6b7684;
+  --color-gray-500: #8d97a3;
+  --color-gray-600: #a7b0bb;
+  --color-gray-700: #c3cad2;
+  --color-gray-800: #dfe4e9;
+  --color-gray-900: #f2f5f8;
+
+  /* 어두운 바닥에서는 원래 색이 가라앉아 한 단계씩 올린다. */
+  --color-brand: #4d9bff;
+  --color-brand-hover: #6fb0ff;
+  --color-brand-soft: #17253a;
+
+  --color-up: #ff5c6a;
+  --color-up-soft: #33191f;
+  --color-down: #4d9bff;
+  --color-down-soft: #17253a;
+  --color-warn: #ffa726;
+  --color-warn-soft: #33260f;
+
+  /* 검은 배경에서 그림자는 보이지 않으므로 옅은 안쪽 테두리로 카드 경계를 만든다. */
+  --shadow-card: inset 0 0 0 1px rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.3),
+    0 4px 16px rgb(0 0 0 / 0.25);
+  --shadow-pop: inset 0 0 0 1px rgb(255 255 255 / 0.07), 0 4px 12px rgb(0 0 0 / 0.35),
+    0 16px 40px rgb(0 0 0 / 0.45);
+
+  --skeleton-sheen: rgb(255 255 255 / 0.07);
+
+  /* 스크롤바·기본 폼 컨트롤도 함께 어두워진다. */
+  color-scheme: dark;
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: light;
   }
 
   body {
-    background: var(--color-gray-100);
+    background: var(--color-canvas);
     color: var(--color-gray-900);
     font-family: var(--font-sans);
     letter-spacing: -0.01em;
@@ -73,9 +152,14 @@
 
 @layer components {
   .card {
-    background: #fff;
+    background: var(--color-surface);
     border-radius: 20px;
     box-shadow: var(--shadow-card);
+  }
+
+  /* 다른 것 위로 떠오르는 것 (드롭다운, 바텀시트, 툴팁) */
+  .pop {
+    box-shadow: var(--shadow-pop);
   }
 
   /* 금액/비율은 자릿수가 흔들리지 않도록 고정폭 숫자 사용 */
@@ -103,9 +187,9 @@
 
   .field:focus {
     outline: none;
-    background: #fff;
+    background: var(--color-raised);
     border-color: var(--color-brand);
-    box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.14);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 20%, transparent);
   }
 
   .field-sm {
@@ -114,6 +198,7 @@
     font-size: 0.875rem;
   }
 
+  /* 화살표 색은 라이트/다크 gray-500이 거의 같은 값이라 한 벌로 쓴다. */
   .field-select {
     appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%238b95a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l4 4 4-4'/></svg>");
@@ -188,5 +273,49 @@
     font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
+  }
+}
+
+/*
+ * 로딩 스켈레톤.
+ *
+ * 회색 블록 위로 빛이 한 번씩 지나간다. 바탕을 gray-200으로 두면 다크에서도
+ * 팔레트가 뒤집히면서 알아서 따라오므로 테마별 규칙을 따로 쓰지 않는다.
+ * 애니메이션은 자식 의사요소로 돌린다. opacity를 깜빡이면 겹친 글자·아이콘까지
+ * 같이 흐려지기 때문이다.
+ */
+@layer components {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--color-gray-200);
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--skeleton-sheen),
+      transparent
+    );
+    animation: skeleton-sheen 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-sheen {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 움직임을 줄이기로 한 사용자에게는 정지된 회색 블록만 남긴다. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
   }
 }

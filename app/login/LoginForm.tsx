@@ -67,8 +67,8 @@ export default function LoginForm({ next, linkError }: { next?: string; linkErro
       <div className="text-center">
         <div className="mx-auto w-16 h-16 rounded-full bg-brand-soft flex items-center justify-center">
           <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" aria-hidden="true">
-            <rect x="3" y="5.5" width="18" height="13" rx="3" stroke="#3182f6" strokeWidth="2" />
-            <path d="M4.5 8l6.4 4.6a2 2 0 002.2 0L19.5 8" stroke="#3182f6" strokeWidth="2" strokeLinecap="round" />
+            <rect x="3" y="5.5" width="18" height="13" rx="3" stroke="var(--color-brand)" strokeWidth="2" />
+            <path d="M4.5 8l6.4 4.6a2 2 0 002.2 0L19.5 8" stroke="var(--color-brand)" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </div>
         <h2 className="mt-5 text-[22px] font-bold text-gray-900">메일함을 확인해주세요</h2>

@@ -55,6 +55,6 @@ export const config = {
      * /api/* 는 야후 파이낸스 시세만 중계하고 사용자 데이터를 다루지 않으므로 제외했다.
      * (제외하지 않으면 시세 요청 하나마다 세션 검증 왕복이 한 번씩 더 붙는다.)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

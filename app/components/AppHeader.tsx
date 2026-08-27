@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { signOut } from '@/app/auth/actions';
 import { type SessionUser } from '@/app/lib/portfolio-store';
+import ThemeToggle from '@/app/components/ThemeToggle';
 
 /** 상단 탭. 화면을 추가하면 여기만 늘리면 된다. */
 const TABS = [
@@ -30,7 +31,7 @@ export default function AppHeader({
   active: AppTab;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-white/80 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-surface/80 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-5 py-3.5">
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-brand">
@@ -51,7 +52,7 @@ export default function AppHeader({
               aria-current={active === tab.href ? 'page' : undefined}
               className={`rounded-lg px-3 py-1.5 transition-colors ${
                 active === tab.href
-                  ? 'bg-white text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                  ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -61,6 +62,7 @@ export default function AppHeader({
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
           {exchangeRate > 0 && (
             <span className="tnum chip hidden bg-gray-100 text-gray-600 sm:inline-flex">
               $1 = {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}원
