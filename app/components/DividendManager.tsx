@@ -159,47 +159,144 @@ function AnnualAmount({ annualKRW }: { annualKRW: number | null }) {
   );
 }
 
+/** 한 달에 들어올 배당을 종목별로 쪼갠 목록. 같은 티커를 여러 번 담았으면 합쳐서 한 줄로 본다. */
+function monthlyBreakdown(rows: DividendRow[], month: number) {
+  const byTicker = new Map<string, { ticker: string; name: string; amount: number }>();
+
+  for (const row of rows) {
+    const amount = row.monthlyKRW[month - 1];
+    if (amount <= 0) continue;
+    const found = byTicker.get(row.asset.ticker);
+    if (found) found.amount += amount;
+    else byTicker.set(row.asset.ticker, { ticker: row.asset.ticker, name: row.name, amount });
+  }
+
+  return [...byTicker.values()].sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * 말풍선을 붙일 가로 위치.
+ *
+ * 가운데 달은 막대 중심에 맞추고, 양 끝 달은 카드 밖으로 삐져나가지 않게 카드 모서리에 붙인다.
+ */
+function tooltipPosition(month: number): React.CSSProperties {
+  if (month <= 3) return { left: 0 };
+  if (month >= 10) return { right: 0 };
+  return { left: `${((month - 0.5) / 12) * 100}%`, transform: 'translateX(-50%)' };
+}
+
+/** 막대를 가리켰을 때 뜨는 그 달의 배당 상세 */
+function MonthlyTooltip({ month, rows }: { month: number; rows: DividendRow[] }) {
+  const items = monthlyBreakdown(rows, month);
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <div className="rounded-2xl bg-gray-900/95 px-3.5 py-3 shadow-pop">
+      <p className="flex items-baseline justify-between gap-3">
+        <span className="text-[12px] font-semibold text-gray-300">{month}월</span>
+        <span className="tnum text-[13px] font-bold text-white">
+          {formatKRW(Math.round(total))}원
+        </span>
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-1.5 text-[12px] text-gray-400">예상 배당 없음</p>
+      ) : (
+        <ul className="mt-2 space-y-1 border-t border-white/15 pt-2">
+          {items.map((item) => (
+            <li key={item.ticker} className="flex items-baseline justify-between gap-3 text-[12px]">
+              <span className="min-w-0 truncate text-gray-200">{item.name}</span>
+              <span className="tnum shrink-0 font-semibold text-white">
+                {formatKRW(Math.round(item.amount))}원
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** 최근 1년 실적을 달마다 모아 보여주는 막대그래프 */
-function MonthlyChart({ monthlyKRW, currentMonth }: { monthlyKRW: number[]; currentMonth: number }) {
+function MonthlyChart({
+  rows,
+  monthlyKRW,
+  currentMonth,
+}: {
+  rows: DividendRow[];
+  monthlyKRW: number[];
+  currentMonth: number;
+}) {
+  // 마우스는 올리면, 손가락은 누르면 열린다. 열린 달의 상세를 말풍선으로 보여준다.
+  const [activeMonth, setActiveMonth] = useState<number | null>(null);
   const max = Math.max(...monthlyKRW);
   if (max <= 0) return null;
+
+  /** 다른 막대로 옮겨간 뒤 늦게 도착한 leave/blur가 새 말풍선을 닫지 않도록 확인한다. */
+  const closeIfActive = (month: number) =>
+    setActiveMonth((prev) => (prev === month ? null : prev));
 
   return (
     <section>
       <SectionTitle>월별 배당</SectionTitle>
       <div className="card px-4 py-6 sm:px-6">
-        <div className="flex items-end gap-1 sm:gap-2">
-          {monthlyKRW.map((amount, index) => {
-            const month = index + 1;
-            const isCurrent = month === currentMonth;
+        <div className="relative" onPointerLeave={() => setActiveMonth(null)}>
+          <div className="flex items-end gap-1 sm:gap-2">
+            {monthlyKRW.map((amount, index) => {
+              const month = index + 1;
+              const isCurrent = month === currentMonth;
+              const isActive = month === activeMonth;
 
-            return (
-              <div key={month} className="min-w-0 flex-1">
-                <p className="tnum hidden h-4 text-center text-[10px] font-semibold text-gray-500 sm:block">
-                  {amount > 0 ? formatKorean(Math.round(amount)) : ''}
-                </p>
-                <div className="flex h-32 items-end">
-                  <div
-                    role="img"
+              return (
+                <div key={month} className="min-w-0 flex-1">
+                  <p className="tnum hidden h-4 text-center text-[10px] font-semibold text-gray-500 sm:block">
+                    {amount > 0 ? formatKorean(Math.round(amount)) : ''}
+                  </p>
+                  <button
+                    type="button"
                     aria-label={`${month}월 ${formatKRW(Math.round(amount))}원`}
-                    title={`${month}월 ${formatKRW(Math.round(amount))}원`}
-                    className={`w-full rounded-t-[5px] transition-[height] duration-300 ${
-                      amount > 0 ? (isCurrent ? 'bg-brand' : 'bg-brand/35') : 'bg-gray-100'
+                    aria-expanded={isActive}
+                    // 터치는 pointerenter도 먼저 보내기 때문에, 마우스일 때만 올려서 연다.
+                    onPointerEnter={(e) => e.pointerType === 'mouse' && setActiveMonth(month)}
+                    onPointerLeave={(e) => e.pointerType === 'mouse' && closeIfActive(month)}
+                    onFocus={() => setActiveMonth(month)}
+                    onBlur={() => closeIfActive(month)}
+                    onClick={() => setActiveMonth((prev) => (prev === month ? null : month))}
+                    className="flex h-32 w-full items-end"
+                  >
+                    <span
+                      className={`w-full rounded-t-[5px] transition-[height] duration-300 ${
+                        amount > 0
+                          ? isCurrent || isActive
+                            ? 'bg-brand'
+                            : 'bg-brand/35'
+                          : 'bg-gray-100'
+                      }`}
+                      // 금액이 아주 적은 달도 막대가 보이도록 최소 높이를 준다.
+                      style={{ height: amount > 0 ? `max(${(amount / max) * 100}%, 4px)` : '3px' }}
+                    />
+                  </button>
+                  <p
+                    className={`mt-2 text-center text-[11px] ${
+                      isCurrent ? 'font-bold text-brand' : 'text-gray-400'
                     }`}
-                    // 금액이 아주 적은 달도 막대가 보이도록 최소 높이를 준다.
-                    style={{ height: amount > 0 ? `max(${(amount / max) * 100}%, 4px)` : '3px' }}
-                  />
+                  >
+                    {month}
+                  </p>
                 </div>
-                <p
-                  className={`mt-2 text-center text-[11px] ${
-                    isCurrent ? 'font-bold text-brand' : 'text-gray-400'
-                  }`}
-                >
-                  {month}
-                </p>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {activeMonth != null && (
+            <div
+              role="tooltip"
+              // 막대를 가리지 않도록 그래프 위쪽에 띄우고, 클릭은 막대로 그대로 가게 둔다.
+              className="pointer-events-none absolute bottom-full z-10 mb-2 w-44"
+              style={tooltipPosition(activeMonth)}
+            >
+              <MonthlyTooltip month={activeMonth} rows={rows} />
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -413,7 +510,7 @@ export default function DividendManager({ user }: { user: SessionUser | null }) 
               </div>
             </section>
 
-            <MonthlyChart monthlyKRW={monthlyTotals} currentMonth={currentMonth} />
+            <MonthlyChart rows={rows} monthlyKRW={monthlyTotals} currentMonth={currentMonth} />
 
             {/* 종목별 배당 */}
             <section>
