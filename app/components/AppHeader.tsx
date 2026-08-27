@@ -46,8 +46,8 @@ export default function AppHeader({
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-surface/80 backdrop-blur-md">
-      {/* 한 줄로 고정한다. 자리가 모자라면 줄바꿈 대신 탭 줄만 가로로 밀린다. */}
-      <div className="mx-auto flex w-full max-w-5xl flex-nowrap items-center gap-2 px-4 py-3.5 sm:gap-3 sm:px-5">
+      {/* 탭 4개는 좁은 화면 한 줄에 안 들어간다. 그래서 탭 줄만 아래로 내려 폭을 통째로 쓴다. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-2 gap-y-2 px-4 py-3 sm:px-5 lg:flex-nowrap lg:gap-3 lg:py-3.5">
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-brand">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -56,16 +56,19 @@ export default function AppHeader({
               <path d="M16 17v-4" stroke="white" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
             </svg>
           </span>
-          <span className="hidden text-[17px] font-bold text-gray-900 sm:block">곳간</span>
+          <span className="text-[17px] font-bold text-gray-900">곳간</span>
         </Link>
 
-        <nav ref={navRef} className="no-scrollbar flex min-w-0 gap-0.5 overflow-x-auto rounded-[10px] bg-gray-100 p-0.5 text-[13px] font-semibold">
+        <nav
+          ref={navRef}
+          className="no-scrollbar order-last flex w-full min-w-0 gap-0.5 overflow-x-auto rounded-[10px] bg-gray-100 p-0.5 text-[13px] font-semibold lg:order-none lg:w-auto"
+        >
           {TABS.map((tab) => (
             <Link
               key={tab.href}
               href={tab.href}
               aria-current={active === tab.href ? 'page' : undefined}
-              className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 transition-colors sm:px-3 ${
+              className={`flex-1 shrink-0 whitespace-nowrap rounded-lg px-2 py-1.5 text-center transition-colors lg:flex-none lg:px-3 ${
                 active === tab.href
                   ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
                   : 'text-gray-500 hover:text-gray-700'
