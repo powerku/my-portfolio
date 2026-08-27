@@ -22,6 +22,8 @@ export interface DividendInfo {
   nextExDate: string | null;
   /** 다음 배당락일이 주기로 추정한 값인지. Yahoo가 확정 일자를 주면 false */
   nextExDateEstimated: boolean;
+  /** 다음 배당 지급일 (YYYY-MM-DD). Yahoo가 확정 일정을 줄 때만 채워진다. */
+  nextPayDate: string | null;
   /** 최근 1년 배당 지급 횟수. 0이면 배당 이력이 없다. */
   paymentsPerYear: number;
   /** 1~12월 주당 배당금 (최근 1년 실적을 달마다 모은 값, 길이 12) */
@@ -53,6 +55,32 @@ export function formatPerShare(amount: number, currency: string): string {
   }
   const formatted = amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
   return currency ? `${formatted} ${currency}` : formatted;
+}
+
+/** 오늘 날짜를 `YYYY-MM-DD`로. 배당락일과 같은 형식이라 문자열로 바로 견줄 수 있다. */
+export function todayKey(): string {
+  const now = new Date();
+  // 배당락일은 현지 날짜이므로 UTC가 아닌 기기 시간대의 날짜를 쓴다.
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** 오늘부터 배당락일까지 남은 날수. 오늘이면 0, 지난 날짜면 음수. */
+export function daysUntil(dateKey: string, today: string = todayKey()): number {
+  const toUTC = (key: string) => {
+    const [year, month, day] = key.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.round((toUTC(dateKey) - toUTC(today)) / (24 * 60 * 60 * 1000));
+}
+
+/** 남은 날수 표기. 배당락일 당일은 이미 늦어서 사는 날이 아니므로 '오늘'로만 알린다. */
+export function dDayLabel(days: number): string {
+  if (days === 0) return '오늘';
+  if (days === 1) return '내일';
+  if (days > 0) return `D-${days}`;
+  return `${-days}일 지남`;
 }
 
 /** `YYYY-MM-DD` → `2026. 8. 10.` (월·일만 쓰는 화면을 위해 연도는 선택) */

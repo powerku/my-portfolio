@@ -36,45 +36,55 @@ function addMonths(dateKey: string, months: number): string {
 }
 
 /**
- * Yahoo가 확정 발표한 다음 배당락일.
+ * Yahoo가 확정 발표한 다음 배당 일정. (배당락일과 지급일)
  *
  * ETF·암호화폐처럼 배당 일정 자체를 주지 않는 종목이 많아 실패는 정상 흐름으로 보고
- * null을 돌려준다. (이 경우 배당 주기로 추정한다)
+ * 빈 일정을 돌려준다. (이 경우 배당락일은 배당 주기로 추정한다)
  */
-async function fetchConfirmedExDate(ticker: string): Promise<string | null> {
+async function fetchConfirmedSchedule(ticker: string): Promise<{ exDate: string | null; payDate: string | null }> {
   try {
     const summary = await yahooFinance.quoteSummary(ticker, { modules: ['calendarEvents'] });
-    const exDividendDate = summary.calendarEvents?.exDividendDate;
-    return exDividendDate ? toDateKey(exDividendDate) : null;
+    const events = summary.calendarEvents;
+    return {
+      exDate: events?.exDividendDate ? toDateKey(events.exDividendDate) : null,
+      payDate: events?.dividendDate ? toDateKey(events.dividendDate) : null,
+    };
   } catch {
-    return null;
+    return { exDate: null, payDate: null };
   }
 }
 
 /**
- * 다음 배당락일.
+ * 다음 배당 일정.
  *
  * Yahoo가 아직 오지 않은 배당락일을 알려주면 그 값을 쓰고, 없으면 마지막
  * 배당락일에 배당 주기를 더해 추정한다. 배당을 한 번 건너뛴 종목은 추정값이
  * 과거로 나올 수 있어 오늘 이후가 될 때까지 주기를 더한다.
+ *
+ * 지급일은 확정 배당락일이 있을 때만 쓴다. 배당 이력에는 지급일이 없어 추정할 수 없고,
+ * 지난 배당의 지급일을 다음 배당 일정으로 보여주면 오해를 부른다.
  */
-async function findNextExDate(
+async function findNextSchedule(
   ticker: string,
   lastExDate: string | null,
   paymentsPerYear: number,
   today: string,
-): Promise<{ date: string | null; estimated: boolean }> {
-  const confirmed = await fetchConfirmedExDate(ticker);
-  if (confirmed && confirmed >= today) return { date: confirmed, estimated: false };
+): Promise<{ date: string | null; estimated: boolean; payDate: string | null }> {
+  const confirmed = await fetchConfirmedSchedule(ticker);
+  if (confirmed.exDate && confirmed.exDate >= today) {
+    // 지급일은 배당락일보다 뒤에 온다. 그렇지 않으면 지난 배당의 값이므로 버린다.
+    const payDate = confirmed.payDate && confirmed.payDate >= confirmed.exDate ? confirmed.payDate : null;
+    return { date: confirmed.exDate, estimated: false, payDate };
+  }
 
-  if (!lastExDate || paymentsPerYear <= 0) return { date: null, estimated: false };
+  if (!lastExDate || paymentsPerYear <= 0) return { date: null, estimated: false, payDate: null };
 
   const intervalMonths = Math.max(1, Math.round(12 / paymentsPerYear));
   let estimate = addMonths(lastExDate, intervalMonths);
   for (let i = 0; estimate < today && i < 12; i++) {
     estimate = addMonths(estimate, intervalMonths);
   }
-  return { date: estimate, estimated: true };
+  return { date: estimate, estimated: true, payDate: null };
 }
 
 /** 부동소수점 잔여 오차(3.2439999...)를 없앤다. 배당금은 소수 여섯째 자리까지면 충분하다. */
@@ -127,7 +137,7 @@ async function fetchDividendInfo(ticker: string, now: number): Promise<DividendI
 
   const last = events.at(-1);
   const lastExDate = last ? toDateKey(last.date) : null;
-  const { date: nextExDate, estimated } = await findNextExDate(
+  const { date: nextExDate, estimated, payDate } = await findNextSchedule(
     ticker,
     lastExDate,
     recent.length,
@@ -142,6 +152,7 @@ async function fetchDividendInfo(ticker: string, now: number): Promise<DividendI
     lastExDate,
     nextExDate,
     nextExDateEstimated: estimated,
+    nextPayDate: payDate,
     paymentsPerYear: recent.length,
     monthlyPerShare: toMonthlyPerShare(recent),
   };
