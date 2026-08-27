@@ -611,9 +611,10 @@ function AssetCard({
         <div className="min-w-0">
           <dt className="text-[11px] font-medium text-gray-500">현재가</dt>
           <dd className="tnum mt-0.5 text-[13px] font-semibold text-gray-800">
-            {currentPriceKRW != null ? formatKRW(currentPriceKRW) : '—'}
+            {/* 좁은 화면에서 현재가와 등락률이 붙어 보이므로 등락률은 아랫줄로 내린다. */}
+            <span className="block">{currentPriceKRW != null ? formatKRW(currentPriceKRW) : '—'}</span>
             {quote?.changePercent != null && (
-              <span className={`ml-1 text-[12px] ${quote.change != null && quote.change >= 0 ? 'text-up' : 'text-down'}`}>
+              <span className={`block text-[12px] ${quote.change != null && quote.change >= 0 ? 'text-up' : 'text-down'}`}>
                 {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
               </span>
             )}
