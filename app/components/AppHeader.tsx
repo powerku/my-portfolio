@@ -8,6 +8,7 @@ import ThemeToggle from '@/app/components/ThemeToggle';
 /** 상단 탭. 화면을 추가하면 여기만 늘리면 된다. */
 const TABS = [
   { href: '/', label: '포트폴리오' },
+  { href: '/allocation', label: '자산 구성' },
   { href: '/dividend', label: '배당' },
 ] as const;
 

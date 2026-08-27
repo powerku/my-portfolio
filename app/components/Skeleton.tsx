@@ -54,7 +54,7 @@ export function HeaderSkeleton() {
       <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-5 py-3.5">
         <Skeleton className="h-7 w-7 shrink-0 rounded-[9px]" />
         <Skeleton className="hidden h-[17px] w-[88px] sm:block" />
-        <Skeleton className="h-[30px] w-[140px] shrink-0 rounded-[10px]" />
+        <Skeleton className="h-[30px] w-[224px] shrink-0 rounded-[10px]" />
         <div className="ml-auto flex items-center gap-3">
           <Skeleton className="h-7 w-[84px] shrink-0 rounded-[10px]" />
           <Skeleton className="hidden h-[22px] w-[96px] rounded-full sm:block" />
@@ -128,6 +128,44 @@ export function PortfolioSkeleton() {
 
       <SummaryCardSkeleton columns={2} />
 
+      {/* 보유 자산 */}
+      <section>
+        <TitleSkeleton width="w-[68px]" />
+        <ListCardSkeleton rows={4} />
+      </section>
+
+      {/* 자산 등록 — 입력칸 수가 고정이라 실제 배치를 그대로 깐다. */}
+      <section>
+        <TitleSkeleton width="w-[68px]" />
+        <div className="card space-y-4 p-6">
+          {[0, 1].map((row) => (
+            <div key={row} className="grid gap-4 sm:grid-cols-2">
+              {[0, 1].map((col) => (
+                <div key={col}>
+                  <Skeleton className="mb-[7px] h-[13px] w-[56px]" />
+                  <Skeleton className="h-[47px] w-full rounded-[14px]" />
+                </div>
+              ))}
+            </div>
+          ))}
+          <Skeleton className="h-[54px] w-full rounded-[14px]" />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+/**
+ * 자산 구성 화면 본문.
+ *
+ * 도넛과 목표 비중 두 블록뿐이라 실제 화면과 순서·크기를 그대로 맞춰 둔다.
+ * 목표 비중은 분류 수가 고정이라 줄 수까지 실제와 같다.
+ */
+export function AllocationSkeleton() {
+  return (
+    <main aria-busy="true" className="mx-auto w-full max-w-5xl space-y-7 px-5 py-6 pb-16">
+      <LoadingAnnouncement>자산 구성을 불러오고 있어요</LoadingAnnouncement>
+
       {/* 자산 구성 */}
       <section>
         <TitleSkeleton width="w-[68px]" />
@@ -149,7 +187,7 @@ export function PortfolioSkeleton() {
         </div>
       </section>
 
-      {/* 목표 비중 — 분류 수가 고정이라 실제 줄 수를 그대로 깐다. */}
+      {/* 목표 비중 */}
       <section>
         <TitleSkeleton width="w-[68px]" action="w-[74px]" />
         <div className="card px-5 py-1">
@@ -170,12 +208,6 @@ export function PortfolioSkeleton() {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* 보유 자산 */}
-      <section>
-        <TitleSkeleton width="w-[68px]" />
-        <ListCardSkeleton rows={4} />
       </section>
     </main>
   );
