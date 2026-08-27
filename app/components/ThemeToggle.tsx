@@ -56,11 +56,20 @@ const OPTIONS: { value: ThemePreference; label: string; icon: React.ReactNode }[
   { value: 'dark', label: '다크 모드', icon: <MoonIcon /> },
 ];
 
+/** 좁은 화면에서 쓰는 버튼 하나짜리 토글의 다음 차례. 3단을 순서대로 돈다. */
+function nextPreference(current: ThemePreference): ThemePreference {
+  const index = OPTIONS.findIndex((option) => option.value === current);
+  return OPTIONS[(index + 1) % OPTIONS.length].value;
+}
+
 /**
  * 시스템 / 라이트 / 다크 3단 토글.
  *
  * 화면 색 자체는 head 인라인 스크립트가 첫 페인트 전에 이미 맞춰둔다. 이 컴포넌트는
  * 어느 칸이 켜져 있는지 보여주고, 눌렀을 때 선택을 바꾸는 역할만 한다.
+ *
+ * 좁은 화면에서는 칸 세 개가 탭 줄(포트폴리오/자산 구성/배당)의 자리를 빼앗으므로,
+ * 지금 선택만 보여주고 누를 때마다 다음 선택으로 넘어가는 버튼 하나로 접는다.
  */
 export default function ThemeToggle() {
   const preference = useSyncExternalStore(
@@ -80,32 +89,48 @@ export default function ThemeToggle() {
     return () => media.removeEventListener('change', sync);
   }, [preference]);
 
+  const current = OPTIONS.find((option) => option.value === preference) ?? OPTIONS[0];
+
   return (
-    <div
-      role="group"
-      aria-label="화면 테마"
-      className="flex shrink-0 gap-0.5 rounded-[10px] bg-gray-100 p-0.5"
-    >
-      {OPTIONS.map((option) => {
-        const isActive = preference === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setStoredPreference(option.value)}
-            aria-pressed={isActive}
-            title={option.label}
-            className={`flex h-6 w-[26px] items-center justify-center rounded-lg transition-colors ${
-              isActive
-                ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
-                : 'text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            <span className="sr-only">{option.label}</span>
-            {option.icon}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      {/* 좁은 화면: 버튼 하나로 접어 순환시킨다. */}
+      <button
+        type="button"
+        onClick={() => setStoredPreference(nextPreference(preference))}
+        title={current.label}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] bg-gray-100 text-gray-500 transition-colors hover:text-gray-800 sm:hidden"
+      >
+        <span className="sr-only">화면 테마: {current.label} (눌러서 변경)</span>
+        {current.icon}
+      </button>
+
+      {/* 넓은 화면: 세 칸을 그대로 펼친다. */}
+      <div
+        role="group"
+        aria-label="화면 테마"
+        className="hidden shrink-0 gap-0.5 rounded-[10px] bg-gray-100 p-0.5 sm:flex"
+      >
+        {OPTIONS.map((option) => {
+          const isActive = preference === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setStoredPreference(option.value)}
+              aria-pressed={isActive}
+              title={option.label}
+              className={`flex h-6 w-[26px] items-center justify-center rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-raised text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span className="sr-only">{option.label}</span>
+              {option.icon}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
