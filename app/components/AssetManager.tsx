@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import AppHeader from '@/app/components/AppHeader';
 import {
   type Allocations,
@@ -76,20 +76,21 @@ function looksLikeTicker(value: string) {
  * `initial`을 주면(자산 수정) 검색 결과가 오기 전에도 이름과 코드를 채워둘 수 있다.
  */
 function useTickerSearch(initial?: { ticker: string; name: string }) {
-  const [query, setQueryState] = useState(initial?.name ?? '');
+  const [query, setQueryState] = useState(initial?.name.trim() ?? '');
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isSearching, setIsSearching] = useState(false);
   const [selected, setSelected] = useState<{ ticker: string; name: string } | null>(
-    initial ? { ticker: initial.ticker.toUpperCase(), name: initial.name } : null,
+    initial ? { ticker: initial.ticker.toUpperCase(), name: initial.name.trim() } : null,
   );
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const trimmed = query.trim();
   // 고른 종목의 이름을 지우거나 고쳤으면 그 종목을 고른 것으로 보지 않는다.
-  const picked = selected && selected.name === trimmed ? selected : null;
+  // 양쪽 모두 다듬어서 견주므로 종목명에 붙은 공백 때문에 어긋나지는 않는다.
+  const picked = selected && selected.name.trim() === trimmed ? selected : null;
   const ticker = picked?.ticker ?? (looksLikeTicker(trimmed) ? trimmed.toUpperCase() : '');
 
   useEffect(() => {
@@ -149,8 +150,9 @@ function useTickerSearch(initial?: { ticker: string; name: string }) {
   function selectSuggestion(item: SearchResult, onSelect?: (item: SearchResult) => void) {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     // 입력칸에는 이름을 남기고, 저장에 쓸 티커는 selected에 담아둔다.
-    setQueryState(item.name);
-    setSelected({ ticker: item.ticker.toUpperCase(), name: item.name });
+    const name = item.name.trim();
+    setQueryState(name);
+    setSelected({ ticker: item.ticker.toUpperCase(), name });
     setSuggestions([]);
     setShowDropdown(false);
     setActiveIndex(-1);
@@ -660,16 +662,15 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
+/** 한 열에 정렬 기준이 여럿 들어간다 (예: `현재가 · 등락`). 각 기준이 눌러서 정렬되는 버튼이다. */
 function SortHeader({
-  label,
-  sortKey: key,
+  keys,
   activeKey,
   dir,
   onSort,
   align = 'right',
 }: {
-  label: string;
-  sortKey: SortKey;
+  keys: SortKey[];
   activeKey: SortKey;
   dir: SortDir;
   onSort: (key: SortKey) => void;
@@ -677,30 +678,50 @@ function SortHeader({
 }) {
   return (
     <th className={`whitespace-nowrap px-3 py-3 ${align === 'left' ? 'text-left' : 'text-right'}`}>
-      <button
-        type="button"
-        onClick={() => onSort(key)}
-        className={`inline-flex items-center transition-colors hover:text-gray-900 ${
-          align === 'right' ? 'justify-end' : ''
-        } ${activeKey === key ? 'text-gray-900' : ''}`}
-      >
-        {label}
-        <SortIcon active={activeKey === key} dir={dir} />
-      </button>
+      <span className="inline-flex items-center gap-1">
+        {keys.map((key, i) => (
+          <Fragment key={key}>
+            {i > 0 && <span aria-hidden="true" className="text-gray-300">·</span>}
+            <button
+              type="button"
+              onClick={() => onSort(key)}
+              className={`inline-flex items-center transition-colors hover:text-gray-900 ${
+                activeKey === key ? 'text-gray-900' : ''
+              }`}
+            >
+              {SORT_LABELS[key]}
+              <SortIcon active={activeKey === key} dir={dir} />
+            </button>
+          </Fragment>
+        ))}
+      </span>
     </th>
   );
 }
 
-/** 표 열 = 정렬 기준. 표 머리글과 모바일 정렬 선택이 같은 목록을 쓴다. */
-const SORT_COLUMNS: { key: SortKey; label: string; align?: 'left' | 'right' }[] = [
-  { key: 'ticker', label: '종목', align: 'left' },
-  { key: 'category', label: '분류', align: 'left' },
-  { key: 'currentPrice', label: '현재가' },
-  { key: 'changePercent', label: '등락' },
-  { key: 'quantity', label: '수량' },
-  { key: 'evalAmount', label: '평가금액' },
-  { key: 'purchasePrice', label: '매수단가' },
-  { key: 'pnl', label: '평가손익' },
+/** 정렬 기준 이름. 표 머리글과 모바일 정렬 선택이 같은 목록을 쓴다. */
+const SORT_LABELS: Record<SortKey, string> = {
+  ticker: '종목',
+  category: '분류',
+  currentPrice: '현재가',
+  changePercent: '등락',
+  quantity: '수량',
+  evalAmount: '평가금액',
+  purchasePrice: '매수단가',
+  pnl: '평가손익',
+};
+
+const SORT_KEYS = Object.keys(SORT_LABELS) as SortKey[];
+
+/**
+ * 표의 열 구성. 지표 하나에 열 하나를 주면 가로 스크롤이 생기므로,
+ * 짝이 되는 지표(현재가-등락, 수량-매수단가, 평가금액-평가손익)를 한 열에 위아래로 묶는다.
+ */
+const TABLE_COLUMNS: { keys: SortKey[]; align?: 'left' | 'right' }[] = [
+  { keys: ['ticker', 'category'], align: 'left' },
+  { keys: ['currentPrice', 'changePercent'] },
+  { keys: ['quantity', 'purchasePrice'] },
+  { keys: ['evalAmount', 'pnl'] },
 ];
 
 /** 표 머리글을 누를 수 없는 좁은 화면에서 쓰는 정렬 컨트롤 */
@@ -724,8 +745,8 @@ function SortControl({
         aria-label="정렬 기준"
         className="field field-select w-auto rounded-[12px] py-2 pl-3.5 pr-9 font-semibold"
       >
-        {SORT_COLUMNS.map(({ key, label }) => (
-          <option key={key} value={key}>{label}</option>
+        {SORT_KEYS.map((key) => (
+          <option key={key} value={key}>{SORT_LABELS[key]}</option>
         ))}
       </select>
       <button
@@ -745,24 +766,30 @@ function PurchasePrice({
   asset,
   purchasePriceKRW,
   showApprox,
+  inline = false,
 }: {
   asset: Asset;
   purchasePriceKRW: number;
   showApprox: boolean;
+  /** 표에서는 줄 수를 늘리지 않도록 환산액을 같은 줄에 붙인다 */
+  inline?: boolean;
 }) {
   if (asset.purchaseCurrency !== 'USD') {
-    return <span className="block">{asset.purchasePrice.toLocaleString()}원</span>;
+    return (
+      <span className={inline ? undefined : 'block'}>{asset.purchasePrice.toLocaleString()}원</span>
+    );
   }
+  const approx = showApprox && (
+    <span className={`${inline ? 'ml-1' : 'block'} text-[12px] font-normal text-gray-400`}>
+      ≈ {formatKRW(purchasePriceKRW)}원
+    </span>
+  );
   return (
     <>
-      <span className="block">
+      <span className={inline ? undefined : 'block'}>
         ${asset.purchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
       </span>
-      {showApprox && (
-        <span className="block text-[12px] font-normal text-gray-400">
-          ≈ {formatKRW(purchasePriceKRW)}원
-        </span>
-      )}
+      {approx}
     </>
   );
 }
@@ -1231,14 +1258,13 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
               {/* 넓은 화면: 표 */}
               <div className="card hidden overflow-x-auto lg:block">
-                <table className="w-full min-w-[860px] text-[14px]">
+                <table className="w-full min-w-[680px] text-[14px]">
                   <thead className="text-[12px] font-semibold text-gray-500">
                     <tr className="border-b border-gray-100">
-                      {SORT_COLUMNS.map(({ key, label, align }) => (
+                      {TABLE_COLUMNS.map(({ keys, align }) => (
                         <SortHeader
-                          key={key}
-                          label={label}
-                          sortKey={key}
+                          key={keys.join('-')}
+                          keys={keys}
                           activeKey={sortKey}
                           dir={sortDir}
                           onSort={handleSort}
@@ -1256,58 +1282,62 @@ export default function AssetManager({ userId, userEmail }: { userId: string; us
 
                       return (
                         <tr key={asset.id} className="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50">
+                          {/* 종목 · 분류 */}
                           <td className="px-3 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <TickerAvatar asset={asset} />
                               <span className="min-w-0">
-                                <span className="block max-w-[180px] truncate font-semibold text-gray-900">
+                                <span className="block max-w-[220px] truncate font-semibold text-gray-900">
                                   {resolveAssetName(asset.ticker, { shortName: q?.shortName })}
                                 </span>
-                                <span className="block text-[12px] text-gray-400">{asset.ticker}</span>
+                                <span className="mt-0.5 flex items-center gap-1 text-[12px] text-gray-400">
+                                  <span className="truncate">{asset.ticker}</span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="shrink-0">{asset.category}</span>
+                                </span>
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-3.5">
-                            <span className="chip bg-gray-100 text-gray-600">{asset.category}</span>
-                          </td>
+                          {/* 현재가 · 등락 */}
                           <td className="tnum px-3 py-3.5 text-right text-gray-800">
-                            {currentPriceKRW != null ? formatKRW(currentPriceKRW) : '—'}
+                            <span className="block">
+                              {currentPriceKRW != null ? formatKRW(currentPriceKRW) : '—'}
+                            </span>
+                            {q?.changePercent != null && (
+                              <span
+                                className={`block text-[12px] font-semibold ${
+                                  q.change != null && q.change >= 0 ? 'text-up' : 'text-down'
+                                }`}
+                              >
+                                {q.changePercent >= 0 ? '+' : ''}
+                                {q.changePercent.toFixed(2)}%
+                              </span>
+                            )}
                           </td>
-                          <td
-                            className={`tnum px-3 py-3.5 text-right font-semibold ${
-                              q?.change != null && q.change >= 0 ? 'text-up' : 'text-down'
-                            }`}
-                          >
-                            {q?.changePercent != null
-                              ? `${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%`
-                              : '—'}
-                          </td>
-                          <td className="tnum px-3 py-3.5 text-right text-gray-800">{asset.quantity.toLocaleString()}</td>
-                          <td className="tnum px-3 py-3.5 text-right font-bold text-gray-900">
-                            {evalAmount != null ? `${formatKRW(evalAmount)}원` : '—'}
-                          </td>
+                          {/* 수량 · 매수단가 */}
                           <td className="tnum px-3 py-3.5 text-right text-gray-800">
-                            <PurchasePrice
-                              asset={asset}
-                              purchasePriceKRW={purchasePriceKRW}
-                              showApprox={exchangeRate > 0}
-                            />
+                            <span className="block">{asset.quantity.toLocaleString()}</span>
+                            <span className="block text-[12px] text-gray-400">
+                              <PurchasePrice
+                                asset={asset}
+                                purchasePriceKRW={purchasePriceKRW}
+                                showApprox={exchangeRate > 0}
+                                inline
+                              />
+                            </span>
                           </td>
-                          <td
-                            className={`tnum px-3 py-3.5 text-right font-semibold ${
-                              pnl != null && pnl >= 0 ? 'text-up' : 'text-down'
-                            }`}
-                          >
-                            {pnl != null ? (
-                              <>
-                                <span className="block">{formatSigned(pnl)}원</span>
-                                <span className="block text-[12px] font-medium opacity-80">
-                                  {pnlPct! >= 0 ? '+' : ''}
-                                  {pnlPct!.toFixed(2)}%
-                                </span>
-                              </>
-                            ) : (
-                              '—'
+                          {/* 평가금액 · 평가손익 */}
+                          <td className="tnum px-3 py-3.5 text-right">
+                            <span className="block font-bold text-gray-900">
+                              {evalAmount != null ? `${formatKRW(evalAmount)}원` : '—'}
+                            </span>
+                            {pnl != null && (
+                              <span
+                                className={`block text-[12px] font-semibold ${pnl >= 0 ? 'text-up' : 'text-down'}`}
+                              >
+                                {formatSigned(pnl)}원 ({pnlPct! >= 0 ? '+' : ''}
+                                {pnlPct!.toFixed(2)}%)
+                              </span>
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-right">

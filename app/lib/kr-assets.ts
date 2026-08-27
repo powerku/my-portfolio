@@ -111,6 +111,10 @@ export function findKoreanName(ticker: string): string | undefined {
  *
  * 서버(`/api/quote`)와 화면이 같은 규칙을 쓰도록 여기 한 곳에 둔다. 화면에서는
  * 시세를 아직 못 받았거나 조회에 실패해도 등록된 한글 이름은 바로 보여줄 수 있다.
+ *
+ * Yahoo의 이름은 끝에 공백이 붙어 오는 경우가 있어(예: TLT → "iShares 20+ Year
+ * Treasury Bond ") 반드시 다듬어서 돌려준다. 공백이 남으면 검색 결과로 채운
+ * 이름과 사용자가 입력한 이름이 달라져 자산 등록이 막힌다.
  */
 export function resolveAssetName(
   ticker: string,
@@ -121,7 +125,8 @@ export function resolveAssetName(
     if (known) return known;
     if (names.longName) return cleanKoreanName(names.longName);
   }
-  return names.shortName ?? names.longName ?? ticker;
+  const name = names.shortName?.trim() || names.longName?.trim();
+  return name || ticker;
 }
 
 /**
