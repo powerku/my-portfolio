@@ -10,9 +10,9 @@ import { THEME_COLORS } from './lib/theme';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: '내 포트폴리오',
+    name: '곳간',
     // 홈 화면 아이콘 밑에 붙는 이름. 길면 잘리므로 12자 안쪽으로 둔다.
-    short_name: '포트폴리오',
+    short_name: '곳간',
     description: '내 자산과 배당을 한눈에 관리하는 포트폴리오',
     lang: 'ko',
     start_url: '/',

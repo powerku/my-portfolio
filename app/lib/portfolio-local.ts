@@ -12,11 +12,11 @@
 import {
   type Allocations,
   type Asset,
-  type AssetCategory,
   type Currency,
-  CATEGORIES,
+  emptyAllocations,
   hasAllocations,
-  isAssetCategory,
+  knownCategory,
+  toAssetCategory,
 } from '@/app/lib/portfolio';
 
 const ASSETS_KEY = 'portfolio_assets';
@@ -53,7 +53,7 @@ export function readAssets(): Asset[] {
     .map((a) => ({
       id: typeof a.id === 'string' ? a.id : crypto.randomUUID(),
       ticker: String(a.ticker ?? '').toUpperCase(),
-      category: isAssetCategory(a.category) ? a.category : ('기타' as AssetCategory),
+      category: toAssetCategory(a.category),
       quantity: Number(a.quantity) || 0,
       purchasePrice: Number(a.purchasePrice) || 0,
       purchaseCurrency: (a.purchaseCurrency === 'USD' ? 'USD' : 'KRW') as Currency,
@@ -83,10 +83,12 @@ export function readAllocations(): Allocations | null {
   const parsed = readJSON(ALLOCATIONS_KEY);
   if (typeof parsed !== 'object' || parsed === null) return null;
 
-  const values = parsed as Record<string, unknown>;
-  const allocations = Object.fromEntries(
-    CATEGORIES.map((c) => [c, Number(values[c]) || 0]),
-  ) as Allocations;
+  // 예전 이름으로 담긴 값도 새 분류에 얹는다. (portfolio.ts RENAMED_CATEGORIES)
+  const allocations = emptyAllocations();
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const category = knownCategory(key);
+    if (category) allocations[category] = Number(value) || 0;
+  }
 
   return hasAllocations(allocations) ? allocations : null;
 }

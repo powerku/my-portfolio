@@ -663,7 +663,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
   const userId = user?.id ?? null;
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
-  const [category, setCategory] = useState<AssetCategory>('미국주식');
+  const [category, setCategory] = useState<AssetCategory>('해외주식');
   const [purchaseCurrency, setPurchaseCurrency] = useState<Currency>('KRW');
   const [quantity, setQuantity] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');

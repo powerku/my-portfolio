@@ -7,7 +7,8 @@ import {
   type Currency,
   CATEGORIES,
   emptyAllocations,
-  isAssetCategory,
+  knownCategory,
+  toAssetCategory,
 } from '@/app/lib/portfolio';
 
 /** Supabase `assets` 테이블 행 */
@@ -25,7 +26,7 @@ function rowToAsset(row: AssetRow): Asset {
   return {
     id: row.id,
     ticker: row.ticker,
-    category: isAssetCategory(row.category) ? row.category : '기타',
+    category: toAssetCategory(row.category),
     quantity: Number(row.quantity),
     purchasePrice: Number(row.purchase_price),
     purchaseCurrency: row.purchase_currency === 'USD' ? 'USD' : ('KRW' as Currency),
@@ -87,9 +88,8 @@ export async function fetchAllocations(): Promise<Allocations> {
 
   const allocations = emptyAllocations();
   for (const row of rows ?? []) {
-    if (isAssetCategory(row.category)) {
-      allocations[row.category] = Number(row.target_pct);
-    }
+    const category = knownCategory(row.category);
+    if (category) allocations[category] = Number(row.target_pct);
   }
   return allocations;
 }

@@ -11,6 +11,7 @@ const TABS = [
   { href: '/', label: '포트폴리오' },
   { href: '/allocation', label: '자산 구성' },
   { href: '/dividend', label: '배당' },
+  { href: '/about', label: '소개' },
 ] as const;
 
 export type AppTab = (typeof TABS)[number]['href'];
@@ -55,7 +56,7 @@ export default function AppHeader({
               <path d="M16 17v-4" stroke="white" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
             </svg>
           </span>
-          <span className="hidden text-[17px] font-bold text-gray-900 sm:block">내 포트폴리오</span>
+          <span className="hidden text-[17px] font-bold text-gray-900 sm:block">곳간</span>
         </Link>
 
         <nav ref={navRef} className="no-scrollbar flex min-w-0 gap-0.5 overflow-x-auto rounded-[10px] bg-gray-100 p-0.5 text-[13px] font-semibold">

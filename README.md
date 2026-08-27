@@ -1,4 +1,4 @@
-# 내 포트폴리오
+# 곳간
 
 보유 자산의 실시간 평가금액과 목표 비중을 관리하는 Next.js 앱입니다.
 로그인·자산 데이터·목표 비중은 [Supabase](https://supabase.com)에 저장되고, 시세는 Yahoo Finance에서 가져옵니다.
@@ -11,7 +11,7 @@
 3. **Authentication → Providers → Email**에서 `Enable Email provider`를 켜고,
    비밀번호 없이 쓸 것이므로 `Confirm email`은 켠 상태로 둡니다 (매직 링크가 곧 인증 링크입니다).
 4. **Authentication → URL Configuration**에 아래를 등록합니다.
-   - `Site URL`: 배포 주소 (예: `https://my-portfolio.vercel.app`)
+   - `Site URL`: 배포 주소 (예: `https://gotgan.vercel.app`)
    - `Redirect URLs`: `http://localhost:3000/auth/callback`, `https://<배포-주소>/auth/callback`
 
 > Supabase 기본 SMTP는 시간당 발송량 제한이 빡빡합니다. 실사용 시

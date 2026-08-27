@@ -33,15 +33,15 @@ export function sharesForAmount(amountKRW: number, priceKRW: number): number {
  */
 export const DEFAULT_TICKER_CANDIDATES: Partial<Record<AssetCategory, string[]>> = {
   // 미국 시총 상위 종목 (조회 시점 1위를 고른다)
-  '미국주식': ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'AVGO', 'META', 'TSLA'],
+  '해외주식': ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'AVGO', 'META', 'TSLA'],
   // 미국 장기 국채 ETF
-  '미국채권': ['TLT'],
+  '해외채권': ['TLT'],
   // 국내 시총 상위 종목 (조회 시점 1위를 고른다)
   '국내주식': ['005930.KS', '000660.KS', '373220.KS', '207940.KS', '105560.KS'],
   // 국내 상장 국고채 ETF
   '국내채권': ['148070.KS'],
   // 국내 상장 금 현물 ETF
-  '금': ['411060.KS'],
+  '대체투자': ['411060.KS'],
 };
 
 /** 기본 포트폴리오로 등록할 한 종목 (id는 저장할 때 붙인다) */

@@ -1,4 +1,4 @@
--- 내 포트폴리오 스키마
+-- 곳간 스키마
 -- Supabase 대시보드 > SQL Editor 에 그대로 붙여넣고 실행하세요.
 
 -- ---------------------------------------------------------------------------
@@ -9,7 +9,7 @@ create table if not exists public.assets (
   user_id           uuid not null default auth.uid() references auth.users (id) on delete cascade,
   ticker            text not null check (length(ticker) between 1 and 32),
   category          text not null check (
-                      category in ('미국주식', '미국채권', '국내주식', '국내채권', '금', '암호화폐', '기타')
+                      category in ('해외주식', '해외채권', '국내주식', '국내채권', '대체투자', '암호화폐', '기타')
                     ),
   quantity          double precision not null check (quantity > 0),
   purchase_price    double precision not null check (purchase_price > 0),
@@ -27,7 +27,7 @@ create index if not exists assets_user_id_created_at_idx
 create table if not exists public.allocations (
   user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
   category   text not null check (
-               category in ('미국주식', '미국채권', '국내주식', '국내채권', '금', '암호화폐', '기타')
+               category in ('해외주식', '해외채권', '국내주식', '국내채권', '대체투자', '암호화폐', '기타')
              ),
   target_pct double precision not null default 0 check (target_pct >= 0 and target_pct <= 100),
   updated_at timestamptz not null default now(),

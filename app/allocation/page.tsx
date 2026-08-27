@@ -2,7 +2,7 @@ import AllocationManager from '@/app/components/AllocationManager';
 import { createClient } from '@/app/lib/supabase/server';
 
 export const metadata = {
-  title: '자산 구성 · 내 포트폴리오',
+  title: '자산 구성 · 곳간',
   description: '분류별 자산 구성과 목표 비중을 한눈에',
 };
 

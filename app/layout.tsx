@@ -3,14 +3,14 @@ import { THEME_COLORS, THEME_INIT_SCRIPT } from "./lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "내 포트폴리오",
+  title: "곳간",
   description: "내 자산을 한눈에 관리하는 포트폴리오",
-  applicationName: "내 포트폴리오",
+  applicationName: "곳간",
   // 매니페스트(app/manifest.ts) 링크는 Next가 알아서 넣는다. 여기는 iOS 몫이다.
   appleWebApp: {
     capable: true,
     // 홈 화면 아이콘 아래 이름. 없으면 페이지 제목이 그대로 들어가 길어진다.
-    title: "포트폴리오",
+    title: "곳간",
     /*
      * default를 쓰면 iOS가 theme-color를 상태 표시줄 색으로 삼는다.
      * theme-color는 테마 전환 때 함께 바뀌므로(app/lib/theme.ts) 다크에서도 어긋나지 않는다.

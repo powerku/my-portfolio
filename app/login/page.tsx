@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import LoginForm from './LoginForm';
 
 export const metadata = {
-  title: '로그인 · 내 포트폴리오',
+  title: '로그인 · 곳간',
 };
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {

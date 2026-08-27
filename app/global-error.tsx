@@ -113,7 +113,7 @@ export default function GlobalError({
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
-        <title>오류 · 내 포트폴리오</title>
+        <title>오류 · 곳간</title>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <style dangerouslySetInnerHTML={{ __html: STYLES }} />
       </head>
