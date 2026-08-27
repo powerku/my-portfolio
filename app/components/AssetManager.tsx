@@ -545,37 +545,20 @@ function SortControl({
   );
 }
 
-/** 매수 단가 (달러 매수는 원화 환산을 함께 보여준다) */
+/** 매수 단가. 달러로 산 종목도 원화로 환산해 보여준다. */
 function PurchasePrice({
   asset,
   purchasePriceKRW,
-  showApprox,
-  inline = false,
+  hasExchangeRate,
 }: {
   asset: Asset;
   purchasePriceKRW: number;
-  showApprox: boolean;
-  /** 표에서는 줄 수를 늘리지 않도록 환산액을 같은 줄에 붙인다 */
-  inline?: boolean;
+  hasExchangeRate: boolean;
 }) {
-  if (asset.purchaseCurrency !== 'USD') {
-    return (
-      <span className={inline ? undefined : 'block'}>{asset.purchasePrice.toLocaleString()}원</span>
-    );
-  }
-  const approx = showApprox && (
-    <span className={`${inline ? 'ml-1' : 'block'} text-[12px] font-normal text-gray-400`}>
-      ≈ {formatKRW(purchasePriceKRW)}원
-    </span>
-  );
-  return (
-    <>
-      <span className={inline ? undefined : 'block'}>
-        ${asset.purchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-      </span>
-      {approx}
-    </>
-  );
+  // 환율을 못 받았으면 달러 매수 단가를 환산할 수 없다. (1:1로 환산된 값을 보여주지 않는다)
+  if (asset.purchaseCurrency === 'USD' && !hasExchangeRate) return <>—</>;
+
+  return <>{formatKRW(purchasePriceKRW)}원</>;
 }
 
 /** 표가 들어가지 않는 좁은 화면용 자산 카드 */
@@ -645,7 +628,7 @@ function AssetCard({
         <div className="min-w-0">
           <dt className="text-[11px] font-medium text-gray-500">매수단가</dt>
           <dd className="tnum mt-0.5 text-[13px] font-semibold text-gray-800">
-            <PurchasePrice asset={asset} purchasePriceKRW={purchasePriceKRW} showApprox={hasExchangeRate} />
+            <PurchasePrice asset={asset} purchasePriceKRW={purchasePriceKRW} hasExchangeRate={hasExchangeRate} />
           </dd>
         </div>
       </dl>
@@ -1085,8 +1068,7 @@ export default function AssetManager({ user }: { user: SessionUser | null }) {
                               <PurchasePrice
                                 asset={asset}
                                 purchasePriceKRW={purchasePriceKRW}
-                                showApprox={exchangeRate > 0}
-                                inline
+                                hasExchangeRate={exchangeRate > 0}
                               />
                             </span>
                           </td>

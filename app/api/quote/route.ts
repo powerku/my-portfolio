@@ -54,7 +54,7 @@ const getQuotes = unstable_cache(
 );
 
 /**
- * GET /api/quote?tickers=AAPL,005930.KS,USDKRW=X
+ * GET /api/quote?tickers=AAPL,005930.KS,KRW=X
  *
  * 응답은 요청한 티커를 키로 하는 객체다. (`ticker` 파라미터도 같은 뜻으로 받는다)
  */

@@ -14,8 +14,15 @@ export interface Quote {
   changePercent: number | null;
 }
 
-/** 원/달러 환율도 시세와 같은 방식으로 조회한다 */
-export const EXCHANGE_RATE_TICKER = 'USDKRW=X';
+/**
+ * 원/달러 환율도 시세와 같은 방식으로 조회한다.
+ *
+ * Yahoo가 쓰는 정식 심볼은 'KRW=X'(= USD/KRW)다. 'USDKRW=X'로 물어봐도 시세는
+ * 오지만 응답 심볼이 'KRW=X'로 바뀌어 돌아오는데, /api/quote는 요청한 티커를
+ * 키로 응답을 맞추므로 환율만 빠진 채 내려간다. 그러면 환율이 0으로 남아
+ * 달러 종목이 환산 없이(달러 숫자 그대로) 원화처럼 보인다.
+ */
+export const EXCHANGE_RATE_TICKER = 'KRW=X';
 
 /** 여러 티커 시세를 한 번에 조회. 실패하면 빈 결과를 돌려준다. */
 export async function fetchQuotes(tickers: string[]): Promise<Record<string, Quote>> {
