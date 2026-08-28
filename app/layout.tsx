@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SITE_URL } from "./lib/site";
 import { THEME_COLORS, THEME_INIT_SCRIPT } from "./lib/theme";
 import "./globals.css";
@@ -67,7 +69,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Vercel 대시보드에서 방문·유입 경로를 본다. 배포 환경에서만 스크립트가 붙는다. */}
+        <Analytics />
+        {/* 실사용자 Core Web Vitals(LCP·INP·CLS)를 수집한다. */}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
