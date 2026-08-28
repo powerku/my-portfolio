@@ -23,7 +23,10 @@
 
 Supabase 없이도 뜹니다. 로그인만 동작하지 않고, 데이터는 브라우저에 저장됩니다.
 
+Node는 22.x를 씁니다 (`.nvmrc`). nvm을 쓴다면 `nvm use`로 맞춥니다.
+
 ```bash
+nvm use        # .nvmrc의 Node 22로 전환 (없으면 nvm install)
 npm install
 npm run dev
 ```
