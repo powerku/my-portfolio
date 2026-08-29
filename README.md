@@ -62,7 +62,7 @@ cp .env.example .env.local
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon(publishable) key — 공개되어도 되는 키이며, 접근 제어는 RLS가 담당 |
-| `NEXT_PUBLIC_SITE_URL` | 배포 주소. 사이트맵·canonical의 기준 (Vercel은 자동 감지하므로 생략 가능) |
+| `NEXT_PUBLIC_SITE_URL` | 배포 주소. 사이트맵·canonical과 **로그인 링크 착지 주소**의 기준. 로컬(`.env.local`)에서는 비워 두어야 `http://localhost:3000`으로 돌아옵니다 |
 | `GOOGLE_SITE_VERIFICATION` | Search Console 소유 확인용 meta 값 (DNS 확인을 쓰면 불필요) |
 
 ### 로그인 흐름

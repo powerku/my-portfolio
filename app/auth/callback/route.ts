@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createClient } from '@/app/lib/supabase/server';
+import { authOrigin } from '@/app/lib/site';
 
 /**
  * 매직 링크 착지 지점.
@@ -10,7 +11,9 @@ import { createClient } from '@/app/lib/supabase/server';
  * 두 경우를 모두 처리한다.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
+  // 배포에서는 연결한 도메인, 로컬에서는 localhost:3000
+  const origin = authOrigin();
   const code = searchParams.get('code');
   const tokenHash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;

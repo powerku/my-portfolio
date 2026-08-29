@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import LinkError from './LinkError';
 import { createClient } from '@/app/lib/supabase/client';
+import { authOrigin } from '@/app/lib/site';
 
 export default function LoginForm({ next, linkError }: { next?: string; linkError?: string | null }) {
   const [email, setEmail] = useState('');
@@ -44,7 +45,7 @@ export default function LoginForm({ next, linkError }: { next?: string; linkErro
 
     setStatus('sending');
 
-    const callback = new URL('/auth/callback', window.location.origin);
+    const callback = new URL('/auth/callback', authOrigin());
     if (next) callback.searchParams.set('next', next);
 
     const supabase = createClient();
